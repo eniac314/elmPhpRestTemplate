@@ -27,8 +27,14 @@ import Url.Builder as UrlBuilder exposing (Root(..), absolute)
 import Url.Parser as UrlParser exposing (..)
 
 
+
+-- to be use if the app is not located in the web document folder
+-- ex: ["myproject", "public"] -> /myproject/public
+-- it should be [] otherwise
+
+
 docRoot =
-    "public"
+    [ "public" ]
 
 
 subscriptions model =
@@ -110,8 +116,8 @@ init flags url key =
             Auth.init AuthMsg
 
         path =
-            if unsurround "/" url.path == UrlBuilder.relative [ docRoot ] [] then
-                absolute_ [ docRoot, "home" ] []
+            if unsurround "/" url.path == UrlBuilder.relative docRoot [] then
+                UrlBuilder.absolute (docRoot ++ [ "home" ]) []
 
             else
                 url.path
@@ -207,27 +213,23 @@ update msg model =
             ( model, Cmd.none )
 
 
-absolute_ path params =
-    UrlBuilder.absolute (List.filter (\x -> x /= "") path) params
-
-
 pathParser =
     let
         rootParser =
-            if docRoot == "" then
+            if docRoot == [] then
                 UrlParser.top
 
             else
-                UrlParser.s docRoot
+                List.foldl (\seg acc -> acc </> UrlParser.s seg) UrlParser.top docRoot
     in
     UrlParser.oneOf
         [ UrlParser.map
-            (\anchor -> ( absolute_ [ docRoot, "home" ] [], anchor ))
+            (\anchor -> ( UrlBuilder.absolute (docRoot ++ [ "home" ]) [], anchor ))
             (rootParser
                 </> UrlParser.fragment identity
             )
         , UrlParser.map
-            (\anchor -> ( absolute_ [ docRoot, "auth" ] [], anchor ))
+            (\anchor -> ( UrlBuilder.absolute (docRoot ++ [ "auth" ]) [], anchor ))
             (rootParser
                 </> UrlParser.s "auth"
                 </> UrlParser.fragment identity
@@ -253,17 +255,17 @@ view model =
                 [ row [ spacing 15 ]
                     [ link
                         []
-                        { url = absolute_ [ docRoot ] []
+                        { url = UrlBuilder.absolute docRoot []
                         , label = el [] (text "home")
                         }
                     , link
                         []
-                        { url = absolute_ [ docRoot, "auth" ] []
+                        { url = UrlBuilder.absolute (docRoot ++ [ "auth" ]) []
                         , label = el [] (text "auth")
                         }
                     ]
                 , Dict.get
-                    (String.dropLeft (String.length <| absolute_ [ docRoot ] []) model.currentPosition.path)
+                    (String.dropLeft (String.length <| UrlBuilder.absolute docRoot []) model.currentPosition.path)
                     (content model)
                     |> Maybe.withDefault Element.none
                 ]
