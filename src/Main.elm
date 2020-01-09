@@ -27,16 +27,6 @@ import Url.Builder as UrlBuilder exposing (Root(..), absolute)
 import Url.Parser as UrlParser exposing (..)
 
 
-
--- to be use if the app is not located in the web document folder
--- ex: ["myproject", "public"] -> /myproject/public
--- it should be [] otherwise
-
-
-docRoot =
-    [ "public" ]
-
-
 subscriptions model =
     Sub.batch
         [ onResize WinResize
@@ -63,7 +53,6 @@ type alias Model =
     , visibility : Visibility
     , key : Nav.Key
     , url : Url.Url
-    , currentPosition : { path : Path, anchor : Maybe String }
     , zone : Time.Zone
     , seed : Random.Seed
     , logs : Dict.Dict Int ( Log, Bool )
@@ -114,13 +103,6 @@ init flags url key =
     let
         ( authPlugin, authCmd ) =
             Auth.init AuthMsg
-
-        path =
-            if unsurround "/" url.path == UrlBuilder.relative docRoot [] then
-                UrlBuilder.absolute (docRoot ++ [ "home" ]) []
-
-            else
-                url.path
     in
     ( { device = classifyDevice { width = flags.width, height = flags.height }
       , width = flags.width
@@ -128,7 +110,6 @@ init flags url key =
       , visibility = Visible
       , key = key
       , url = url
-      , currentPosition = { path = path, anchor = Nothing }
       , zone = Time.utc
       , seed = initialSeed flags.currentTime
       , logs = Dict.empty
@@ -154,11 +135,7 @@ update msg model =
             case UrlParser.parse pathParser url of
                 Just ( path, mbAnchor ) ->
                     ( { model
-                        | currentPosition =
-                            { path = path
-                            , anchor = mbAnchor
-                            }
-                        , url = url
+                        | url = url
                       }
                     , Cmd.none
                     )
@@ -214,23 +191,15 @@ update msg model =
 
 
 pathParser =
-    let
-        rootParser =
-            if docRoot == [] then
-                UrlParser.top
-
-            else
-                List.foldl (\seg acc -> acc </> UrlParser.s seg) UrlParser.top docRoot
-    in
     UrlParser.oneOf
         [ UrlParser.map
-            (\anchor -> ( UrlBuilder.absolute (docRoot ++ [ "home" ]) [], anchor ))
-            (rootParser
+            (\anchor -> ( UrlBuilder.absolute [] [], anchor ))
+            (UrlParser.top
                 </> UrlParser.fragment identity
             )
         , UrlParser.map
-            (\anchor -> ( UrlBuilder.absolute (docRoot ++ [ "auth" ]) [], anchor ))
-            (rootParser
+            (\anchor -> ( UrlBuilder.absolute [ "auth" ] [], anchor ))
+            (UrlParser.top
                 </> UrlParser.s "auth"
                 </> UrlParser.fragment identity
             )
@@ -255,17 +224,17 @@ view model =
                 [ row [ spacing 15 ]
                     [ link
                         []
-                        { url = UrlBuilder.absolute docRoot []
+                        { url = UrlBuilder.absolute [] []
                         , label = el [] (text "home")
                         }
                     , link
                         []
-                        { url = UrlBuilder.absolute (docRoot ++ [ "auth" ]) []
+                        { url = UrlBuilder.absolute [ "auth" ] []
                         , label = el [] (text "auth")
                         }
                     ]
                 , Dict.get
-                    (String.dropLeft (String.length <| UrlBuilder.absolute docRoot []) model.currentPosition.path)
+                    model.url.path
                     (content model)
                     |> Maybe.withDefault Element.none
                 ]
@@ -282,7 +251,7 @@ view model =
 content : Model -> Dict String (Element Msg)
 content model =
     Dict.fromList
-        [ ( "/home"
+        [ ( "/"
           , column
                 []
                 [ text "this is home" ]
@@ -298,13 +267,3 @@ content model =
                 [ Auth.view { zone = model.zone } model.authPlugin ]
           )
         ]
-
-
-testurl =
-    { fragment = Nothing
-    , host = "localhost"
-    , path = "/public/auth"
-    , port_ = Nothing
-    , protocol = Url.Http
-    , query = Nothing
-    }

@@ -4,3 +4,6 @@
 /apacheBackup/errors.log
 /apacheBackup/vendor
 /html
+composer.phar
+composer.lock
+encryption.key

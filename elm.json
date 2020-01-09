@@ -16,9 +16,12 @@
             "elm/random": "1.0.0",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
+            "elm-community/dict-extra": "2.4.0",
             "elm-community/string-extra": "4.0.1",
             "mdgriffith/elm-ui": "1.1.5",
-            "rtfeldman/elm-hex": "1.0.0"
+            "rtfeldman/elm-hex": "1.0.0",
+            "rtfeldman/elm-validate": "4.0.1",
+            "the-sett/elm-state-machines": "1.0.1"
         },
         "indirect": {
             "elm/bytes": "1.0.8",

@@ -2,7 +2,6 @@ module Auth.AuthPlugin exposing
     ( LogInfo(..)
     , Model
     , Msg
-    , cmdIfLogged
     , getLogInfo
     , init
     , isLogged
@@ -13,6 +12,8 @@ module Auth.AuthPlugin exposing
     , view
     )
 
+import Dict exposing (..)
+import Dict.Extra exposing (fromListDedupe)
 import Element exposing (..)
 import Element.Background as Background
 import Element.Border as Border
@@ -26,19 +27,11 @@ import Internal.Helpers exposing (PluginResult(..), Status(..), httpErrorToStrin
 import Internal.Logger exposing (..)
 import Json.Decode as Decode
 import Json.Encode as Encode exposing (..)
+import StateMachine exposing (Allowed, State(..))
 import Style.Helpers exposing (buttonStyle, textInputStyle)
 import Task exposing (..)
 import Time exposing (..)
-
-
-cmdIfLogged : LogInfo -> (String -> Cmd msg) -> Cmd msg
-cmdIfLogged logInfo cmd =
-    case logInfo of
-        LoggedIn { sessionId } ->
-            cmd sessionId
-
-        _ ->
-            Cmd.none
+import Validate exposing (..)
 
 
 isLogged : LogInfo -> Bool
@@ -68,31 +61,27 @@ newLogIfLogged logInfo addLogMsg logMsg details isError isImportant =
 type LogInfo
     = LoggedIn
         { username : String
-        , sessionId : String
+
+        --, role : Role
         }
     | LoggedOut
 
 
-type alias Model msg =
-    { username : String
-    , password : String
-    , confirmPassword : String
-    , logInfo : LogInfo
-    , pluginMode : PluginMode
-    , externalMsg : Msg -> msg
-    }
 
-
-init externalMsg =
-    ( { username = ""
-      , password = ""
-      , confirmPassword = ""
-      , logInfo = LoggedOut
-      , pluginMode = LoginMode Waiting
-      , externalMsg = externalMsg
-      }
-    , Cmd.map externalMsg <| checkLogin
-    )
+--type Role =
+--    SuperAdmin
+--    |
+--type Auth
+--    = SignUpForm
+--        (State { emailConfirmation : Allowed }
+--            { username : String
+--            , email : String
+--            , password : String
+--            , confirmPassword : String
+--            }
+--        )
+--    | EmailConfirmationForm
+--        (State {signup})
 
 
 status model =
@@ -106,12 +95,45 @@ status model =
         LogoutMode s ->
             s
 
+        EmailConfirmation s ->
+            s
+
+
+type alias Model msg =
+    { username : String
+    , email : String
+    , password : String
+    , confirmPassword : String
+    , confirmationCode : String
+    , logInfo : LogInfo
+    , pluginMode : PluginMode
+    , showValidationErrors : Bool
+    , validationErrors : ValidationErrors
+    , externalMsg : Msg -> msg
+    }
+
+
+init externalMsg =
+    ( { username = ""
+      , password = ""
+      , confirmPassword = ""
+      , confirmationCode = ""
+      , email = ""
+      , logInfo = LoggedOut
+      , pluginMode = LoginMode Waiting
+      , showValidationErrors = False
+      , validationErrors = Dict.empty
+      , externalMsg = externalMsg
+      }
+    , Cmd.map externalMsg <| checkLoginStatus
+    )
+
 
 subscriptions model =
     Sub.map model.externalMsg <|
         case model.pluginMode of
             LoginMode _ ->
-                Time.every (30 * 1000) (\_ -> Ping)
+                Time.every (30 * 1000) (\_ -> Refresh)
 
             _ ->
                 Sub.none
@@ -119,12 +141,14 @@ subscriptions model =
 
 reset model =
     ( { model
-        | username = ""
-        , password = ""
-        , confirmPassword = ""
+        | username = Nothing
+        , password = Nothing
+        , confirmPassword = Nothing
+        , email = Nothing
         , pluginMode = LoginMode Initial
       }
-    , login model
+    , Cmd.none
+      --login model
     )
 
 
@@ -134,24 +158,29 @@ getLogInfo model =
 
 type PluginMode
     = SignUpMode Status
+    | EmailConfirmation Status
     | LoginMode Status
     | LogoutMode Status
 
 
 type Msg
     = SetUsername String
+    | SetEmail String
     | SetPassword String
     | SetConfirmPassword String
+    | SetConfirmCode String
     | Login
-    | LoginChecked (Result Http.Error LogInfo)
-    | ConfirmLogin (Result Http.Error LogInfo)
+    | LoginStatusResult (Result Http.Error LogInfo)
+    | LoginResult (Result Http.Error LogInfo)
     | SignUp
-    | ConfirmSignUp (Result Http.Error Bool)
+    | SignUpResult (Result Http.Error Bool)
+    | ConfirmEmail
+    | EmailConfirmationResult (Result Http.Error Bool)
     | Logout
-    | ConfirmLogout (Result Http.Error Bool)
+    | LogoutResult (Result Http.Error Bool)
     | ChangePluginMode PluginMode
-    | Ping
-    | PingResult (Result Http.Error Bool)
+    | Refresh
+    | RefreshResult (Result Http.Error Bool)
     | Quit
     | NoOp
 
@@ -176,16 +205,36 @@ update config msg model =
             , Nothing
             )
 
-        Login ->
-            ( { model
-                | pluginMode = LoginMode Waiting
-              }
-            , login model
-                |> Cmd.map model.externalMsg
+        SetEmail s ->
+            ( { model | email = s }
+            , Cmd.none
             , Nothing
             )
 
-        LoginChecked res ->
+        SetConfirmCode s ->
+            ( { model | confirmationCode = s }
+            , Cmd.none
+            , Nothing
+            )
+
+        Login ->
+            case validateLogin model of
+                Ok validModel ->
+                    ( { model
+                        | pluginMode = LoginMode Waiting
+                      }
+                    , login validModel
+                        |> Cmd.map model.externalMsg
+                    , Nothing
+                    )
+
+                Err errors ->
+                    ( { model | showValidationErrors = True, validationErrors = errors }
+                    , Cmd.none
+                    , Nothing
+                    )
+
+        LoginStatusResult res ->
             case res of
                 Err e ->
                     ( { model
@@ -205,7 +254,7 @@ update config msg model =
                     , Just PluginQuit
                     )
 
-        ConfirmLogin res ->
+        LoginResult res ->
             case res of
                 Err e ->
                     ( { model
@@ -234,12 +283,13 @@ update config msg model =
             ( { model
                 | pluginMode = SignUpMode Waiting
               }
-            , signUp model
-                |> Cmd.map model.externalMsg
+              --, signUp model
+              --    |> Cmd.map model.externalMsg
+            , Cmd.none
             , Nothing
             )
 
-        ConfirmSignUp res ->
+        SignUpResult res ->
             case res of
                 Err e ->
                     ( { model | pluginMode = SignUpMode Failure }
@@ -258,6 +308,12 @@ update config msg model =
                     , Nothing
                     )
 
+        ConfirmEmail ->
+            ( model, Cmd.none, Nothing )
+
+        EmailConfirmationResult _ ->
+            ( model, Cmd.none, Nothing )
+
         Logout ->
             ( { model
                 | pluginMode = LogoutMode Waiting
@@ -267,7 +323,7 @@ update config msg model =
             , Nothing
             )
 
-        ConfirmLogout res ->
+        LogoutResult res ->
             case res of
                 Err e ->
                     ( { model | pluginMode = LogoutMode Failure }
@@ -297,11 +353,11 @@ update config msg model =
             , Nothing
             )
 
-        Ping ->
+        Refresh ->
             case model.logInfo of
                 LoggedIn li ->
                     ( { model | pluginMode = LoginMode Waiting }
-                    , ping li.sessionId
+                    , refresh
                         |> Cmd.map model.externalMsg
                     , Nothing
                     )
@@ -309,7 +365,7 @@ update config msg model =
                 _ ->
                     ( model, Cmd.none, Nothing )
 
-        PingResult res ->
+        RefreshResult res ->
             case res of
                 Ok True ->
                     ( { model | pluginMode = LoginMode Success }
@@ -333,45 +389,119 @@ update config msg model =
             ( model, Cmd.none, Nothing )
 
 
-login : Model msg -> Cmd Msg
-login model =
+
+-------------------------------------------------------------------------------
+--# **************************************** #--
+--# ***** Http requests and validation ***** #--
+
+
+type alias FieldId =
+    String
+
+
+type alias ValidationErrors =
+    Dict FieldId (List String)
+
+
+compileErrors : List ( FieldId, String ) -> ValidationErrors
+compileErrors xs =
+    List.map (\( k, a ) -> ( k, [ a ] )) xs
+        |> Dict.Extra.fromListDedupe (++)
+
+
+validateErrorDict validator model =
+    validate validator model
+        |> Result.mapError compileErrors
+
+
+
+-------------------------------------------------------------------------------
+
+
+type alias LoginData a =
+    { a | username : String, password : String }
+
+
+validateLogin : LoginData a -> Result ValidationErrors (Valid (LoginData a))
+validateLogin =
+    validateErrorDict <|
+        Validate.all
+            [ ifBlank .username ( "username", "Please enter a username." )
+            , ifBlank .password ( "password", "Please enter a password" )
+            ]
+
+
+login : Valid (LoginData a) -> Cmd Msg
+login validModel =
     let
+        model =
+            fromValid validModel
+
         body =
             Encode.object
                 [ ( "username"
-                  , Encode.string (.username model)
+                  , Encode.string model.username
                   )
                 , ( "password"
-                  , Encode.string (.password model)
+                  , Encode.string model.password
                   )
                 ]
                 |> Http.jsonBody
     in
     Http.post
-        { url = "login.php"
+        { url = "/api/login"
         , body = body
-        , expect = Http.expectJson ConfirmLogin decodeLoginResult
+        , expect = Http.expectJson LoginResult decodeLoginResult
         }
 
 
-checkLogin : Cmd Msg
-checkLogin =
+checkLoginStatus : Cmd Msg
+checkLoginStatus =
     Http.get
-        { url = "login.php"
-        , expect = Http.expectJson LoginChecked decodeLoginResult
+        { url = "/api/loginStatus"
+        , expect = Http.expectJson LoginStatusResult decodeLoginResult
         }
 
 
 decodeLoginResult : Decode.Decoder LogInfo
 decodeLoginResult =
-    Decode.map2 (\a b -> LoggedIn { username = a, sessionId = b })
+    Decode.map (\a -> LoggedIn { username = a })
         (Decode.field "username" Decode.string)
-        (Decode.field "sessionId" Decode.string)
 
 
-signUp : Model msg -> Cmd Msg
-signUp model =
+
+-------------------------------------------------------------------------------
+
+
+type alias SignUpData a =
+    { a
+        | username : String
+        , email : String
+        , password : String
+        , confirmPassword : String
+    }
+
+
+validateSignUp : SignUpData a -> Result ValidationErrors (Valid (SignUpData a))
+validateSignUp =
+    validateErrorDict <|
+        Validate.all
+            [ ifBlank .username ( "username", "Please enter a username." )
+            , ifBlank .password ( "password", "Please enter a password" )
+            , ifBlank .confirmPassword ( "confirmPassword", "Please confirm your password" )
+            , ifFalse (\m -> m.password == m.confirmPassword)
+                ( "confirmPassword", "Passwords are not matching" )
+            , ifBlank .email ( "email", "Please enter an email" )
+            , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
+            ]
+
+
+signUp : Valid (SignUpData a) -> Cmd Msg
+signUp validModel =
     let
+        model =
+            fromValid validModel
+
         body =
             Encode.object
                 [ ( "username"
@@ -380,13 +510,16 @@ signUp model =
                 , ( "password"
                   , Encode.string (.password model)
                   )
+                , ( "email"
+                  , Encode.string "florian.gillard@tutanota.com"
+                  )
                 ]
                 |> Http.jsonBody
     in
     Http.post
-        { url = "signup.php"
+        { url = "/api/signup"
         , body = body
-        , expect = Http.expectJson ConfirmSignUp decodeSignupResult
+        , expect = Http.expectJson SignUpResult decodeSignupResult
         }
 
 
@@ -394,39 +527,96 @@ decodeSignupResult =
     Decode.field "signUpComplete" Decode.bool
 
 
-ping : String -> Cmd Msg
-ping sessionId =
+
+-------------------------------------------------------------------------------
+
+
+type alias ConfirmEmailData a =
+    { a
+        | email : String
+        , confirmationCode : String
+    }
+
+
+validateConfirmEmail : ConfirmEmailData a -> Result ValidationErrors (Valid (ConfirmEmailData a))
+validateConfirmEmail =
+    validateErrorDict <|
+        Validate.all
+            [ ifBlank .email ( "email", "Please enter an email" )
+            , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
+            , ifBlank .confirmationCode ( "confirmationCode", "Please enter a confirmation code" )
+            , ifFalse
+                (\m ->
+                    case String.toInt m.confirmationCode of
+                        Just n ->
+                            n >= 0 && n <= 999999
+
+                        Nothing ->
+                            False
+                )
+                ( "confirmationCode", "The code is invalid" )
+            ]
+
+
+confirmEmail : Valid (ConfirmEmailData a) -> Cmd Msg
+confirmEmail validModel =
     let
-        body =
+        model =
+            fromValid validModel
+    in
+    Http.post
+        { url = "api/confirmMail"
+        , body =
             Encode.object
-                [ ( "sessionId"
-                  , Encode.string sessionId
+                [ ( "confirmationCode"
+                  , String.toInt model.confirmationCode
+                        |> Maybe.withDefault 0
+                        |> Encode.int
+                  )
+                , ( "email"
+                  , Encode.string "florian.gillard@tutanota.com"
                   )
                 ]
                 |> Http.jsonBody
-    in
-    Http.post
-        { url = "ping.php"
-        , body = body
-        , expect = Http.expectJson PingResult decodePing
+        , expect = Http.expectJson EmailConfirmationResult Decode.bool
         }
 
 
-decodePing =
+refresh : Cmd Msg
+refresh =
+    Http.get
+        { url = "/api/refresh"
+        , expect = Http.expectJson RefreshResult decodeRefresh
+        }
+
+
+decodeRefresh =
     Decode.field "message" Decode.string
         |> Decode.map (\s -> s == "success!")
+
+
+
+-------------------------------------------------------------------------------
 
 
 logout : Cmd Msg
 logout =
     Http.get
         { url = "logout.php"
-        , expect = Http.expectJson ConfirmLogout decodeLogoutResult
+        , expect = Http.expectJson LogoutResult decodeLogoutResult
         }
 
 
 decodeLogoutResult =
     Decode.field "notLoggedIn" Decode.bool
+
+
+
+--# ***** Http requests and validation ***** #--
+--# **************************************** #--
+-------------------------------------------------------------------------------
+--# ************************** #--
+--# ***** View functions ***** #--
 
 
 view config model =
@@ -440,6 +630,9 @@ view config model =
 
             LogoutMode status_ ->
                 logoutView config status_ model
+
+            EmailConfirmation status_ ->
+                Element.none
 
 
 signUpView config status_ model =
