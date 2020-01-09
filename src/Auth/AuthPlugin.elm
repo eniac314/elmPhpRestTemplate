@@ -71,17 +71,6 @@ type LogInfo
 --type Role =
 --    SuperAdmin
 --    |
---type Auth
---    = SignUpForm
---        (State { emailConfirmation : Allowed }
---            { username : String
---            , email : String
---            , password : String
---            , confirmPassword : String
---            }
---        )
---    | EmailConfirmationForm
---        (State {signup})
 
 
 status model =
