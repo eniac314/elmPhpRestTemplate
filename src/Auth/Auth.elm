@@ -8,7 +8,7 @@ import Internal.Logger exposing (..)
 import Json.Decode as Decode
 import Json.Decode.Pipeline as Pipeline exposing (..)
 import Json.Encode as Encode
-import StateMachine exposing (Allowed, State(..))
+import StateMachine exposing (Allowed, State(..), untag)
 import Validate exposing (..)
 
 
@@ -86,9 +86,19 @@ type alias CodeVerificationModel =
     , codeVerificationRequestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
+
+    --, onVerified : State CodeVerificationTrans m -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
     , onVerified : ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
+    }
+
+
+type alias CodeVerificationTrans =
+    { login : Allowed
+    , passwordReset : Allowed
+    , userControlPanel : Allowed
+    , adminControlPanel : Allowed
     }
 
 
@@ -261,6 +271,64 @@ update config msg auth =
             , result
             )
 
+        ( Signup state, SignupRequest ) ->
+            let
+                ( newAuth, cmd, result ) =
+                    validateThenSignup state
+            in
+            ( newAuth
+            , Cmd.map config.outMsg cmd
+            , result
+            )
+
+        ( Signup state, SignupRequestResult res ) ->
+            case res of
+                Ok SignupSuccess ->
+                    ( toCodeVerification
+                        state
+                        "You need to verify your email address"
+                        "/api/confirmEmail"
+                        --(\_ -> toLogin)
+                        (validateThenLogin (initLoginState (untag state).username (untag state).password))
+                    , Cmd.none
+                    , Nothing
+                    )
+
+                --Ok WrongCredentials ->
+                --    ( auth
+                --    , newLogR config
+                --        { logMsg = "Login error: wrong credentials"
+                --        , details = Nothing
+                --        , isError = True
+                --        , isImportant = True
+                --        }
+                --    , Nothing
+                --    )
+                --Ok NeedEmailConfirmation ->
+                --    ( toCodeVerification
+                --        state
+                --        "You need to verify your email address"
+                --        "/api/confirmEmail"
+                --        (validateThenLogin state)
+                --    , Cmd.none
+                --    , Nothing
+                --    )
+                _ ->
+                    ( auth
+                    , Cmd.none
+                    , Nothing
+                    )
+
+        --Err httpError ->
+        --    ( auth
+        --    , newLogR config
+        --        { logMsg = "Signup error: network or system error"
+        --        , details = Just <| httpErrorToString httpError
+        --        , isError = True
+        --        , isImportant = False
+        --        }
+        --    , Nothing
+        --    )
         ( _, Refresh ) ->
             case getLogInfo auth of
                 LoggedIn _ ->
@@ -270,7 +338,7 @@ update config msg auth =
                     )
 
                 LoggedOut ->
-                    ( initState
+                    ( initAuth "" ""
                     , Cmd.none
                     , Nothing
                     )
@@ -317,21 +385,49 @@ setUserName auth name =
 
 
 init =
-    ( initState
+    ( initAuth "" ""
     , Cmd.none
     , Nothing
     )
 
 
-initState =
-    { username = ""
-    , password = ""
+initAuth username password =
+    initLoginState username password
+        |> Login
+
+
+initLoginState username password =
+    { username = username
+    , password = password
     , loginRequestStatus = Initial
     , showValidationErrors = False
     , validationErrors = Dict.empty
     }
         |> State
-        |> Login
+
+
+toLogin :
+    State { a | login : Allowed } m
+    -> String
+    -> String
+    -> Bool
+    -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
+toLogin state username password autoLogin =
+    let
+        newState =
+            initLoginState username password
+
+        newAuth =
+            Login newState
+
+        result =
+            if autoLogin then
+                validateThenLogin newState
+
+            else
+                ( newAuth, Cmd.none, Nothing )
+    in
+    result
 
 
 toLoggedState :
@@ -369,12 +465,7 @@ toLoggedState state userProfile =
 
 
 toCodeVerification :
-    State
-        { a
-            | userControlPanel : Allowed
-            , adminControlPanel : Allowed
-        }
-        m
+    State { a | codeVerification : Allowed } m
     -> String
     -> String
     -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
@@ -474,11 +565,11 @@ decodeLoginResult =
 
 
 decodeWrongCredentials =
-    decodeConstant "WRONG CREDENTIALS" WrongCredentials ""
+    decodeConstant "WRONG CREDENTIALS" WrongCredentials
 
 
 decodeNeedEmailConfirmation =
-    decodeConstant "NEED EMAIL CONFIRMATION" NeedEmailConfirmation ""
+    decodeConstant "NEED EMAIL CONFIRMATION" NeedEmailConfirmation
 
 
 decodeUserProfile : Decode.Decoder UserProfile
@@ -595,15 +686,15 @@ decodeCodeVerificationResult =
 
 
 decodeCodeVerificationSuccess =
-    decodeConstant "CODE VERIFICATION SUCCESSFUL" CodeVerificationSuccess ""
+    decodeConstant "CODE VERIFICATION SUCCESSFUL" CodeVerificationSuccess
 
 
 decodeCodeVerificationFailure =
-    decodeConstant "CODE VERIFICATION FAILURE" CodeVerificationFailure ""
+    decodeConstant "CODE VERIFICATION FAILURE" CodeVerificationFailure
 
 
 decodeCodeVerificationTooManyAttemps =
-    decodeConstant "CODE VERIFICATION TOO MANY ATTEMPS" CodeVerificationTooManyAttemps ""
+    decodeConstant "CODE VERIFICATION TOO MANY ATTEMPS" CodeVerificationTooManyAttemps
 
 
 
@@ -667,15 +758,34 @@ signup validData =
 
 type SignupResult
     = SignupSuccess
+    | SignupInvalidEmail
+    | SignupUserAlreadyExists
+    | SignupTooManyRequests
 
 
 decodeSignupResult =
     Decode.oneOf
-        [ Decode.field "message" decodeSignupSuccess ]
+        [ Decode.field "message" decodeSignupSuccess
+        , Decode.field "serverError" decodeSignupInvalidEmail
+        , Decode.field "serverError" decodeSignupUserAlreadyExists
+        , Decode.field "serverError" decodeSignupTooManyRequests
+        ]
 
 
 decodeSignupSuccess =
-    decodeConstant "SIGNUP SUCCESSFUL" SignupSuccess ""
+    decodeConstant "SIGNUP SUCCESSFUL" SignupSuccess
+
+
+decodeSignupInvalidEmail =
+    decodeConstant "INVALID EMAIL ADDRESS" SignupInvalidEmail
+
+
+decodeSignupUserAlreadyExists =
+    decodeConstant "USER ALREADY EXISTS" SignupUserAlreadyExists
+
+
+decodeSignupTooManyRequests =
+    decodeConstant "TOO MANY REQUESTS" SignupTooManyRequests
 
 
 
@@ -696,7 +806,7 @@ decodeRefresh =
         |> Decode.map (\s -> s == "success!")
 
 
-decodeConstant c v e =
+decodeConstant c v =
     Decode.string
         |> Decode.andThen
             (\s ->
@@ -704,5 +814,5 @@ decodeConstant c v e =
                     Decode.succeed v
 
                 else
-                    Decode.fail e
+                    Decode.fail "wrong constant"
             )
