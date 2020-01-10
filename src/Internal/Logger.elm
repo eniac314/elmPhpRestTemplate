@@ -76,6 +76,19 @@ newLog addLogMsg logMsg details isError isImportant =
         )
 
 
+newLogR :
+    { a | addLogMsg : Log -> msg }
+    ->
+        { logMsg : String
+        , details : Maybe String
+        , isError : Bool
+        , isImportant : Bool
+        }
+    -> Cmd msg
+newLogR config r =
+    newLog config.addLogMsg r.logMsg r.details r.isError r.isImportant
+
+
 formatTime =
     String.fromInt
         >> String.padLeft 2 '0'

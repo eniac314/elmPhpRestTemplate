@@ -19,17 +19,17 @@ httpErrorToString : Http.Error -> String
 httpErrorToString e =
     case e of
         BadUrl s ->
-            "Url invalide: " ++ s
+            "Bad Url: " ++ s
 
         Timeout ->
-            "Délai d'attente dépassé"
+            "Timeout"
 
         NetworkError ->
-            "Erreur de réseau"
+            "Network error"
 
         BadStatus statusCode ->
-            "Erreur serveur: "
+            "Bad status: "
                 ++ String.fromInt statusCode
 
         BadBody details ->
-            "Erreur décodage: " ++ details
+            "Unexpected Json: " ++ details
