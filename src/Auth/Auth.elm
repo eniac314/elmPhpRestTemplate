@@ -66,7 +66,7 @@ type Auth
 type alias LoginModel =
     { username : String
     , password : String
-    , loginRequestStatus : Status
+    , requestStatus : Status
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
     }
@@ -83,22 +83,12 @@ type alias PasswordResetModel =
 
 type alias CodeVerificationModel =
     { code : String
-    , codeVerificationRequestStatus : Status
+    , requestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
-
-    --, onVerified : State CodeVerificationTrans m -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
-    , onVerified : ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
+    , onVerified : Msg
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
-    }
-
-
-type alias CodeVerificationTrans =
-    { login : Allowed
-    , passwordReset : Allowed
-    , userControlPanel : Allowed
-    , adminControlPanel : Allowed
     }
 
 
@@ -127,7 +117,7 @@ type alias SignupModel =
     , email : String
     , password : String
     , confirmPassword : String
-    , signupRequestStatus : Status
+    , requestStatus : Status
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
     }
@@ -185,6 +175,7 @@ type Role
 type Msg
     = SetUserName String
     | LoginRequest
+    | AutoLogin String String
     | LoginRequestResult (Result Http.Error LoginResult)
     | CodeVerificationRequest
     | CodeVerificationRequestResult (Result Http.Error CodeVerificationResult)
@@ -230,7 +221,7 @@ update config msg auth =
                     )
 
                 Ok WrongCredentials ->
-                    ( auth
+                    ( Login (setStateRequestStatus state Failure)
                     , newLogR config
                         { logMsg = "Login error: wrong credentials"
                         , details = Nothing
@@ -245,13 +236,13 @@ update config msg auth =
                         state
                         "You need to verify your email address"
                         "/api/confirmEmail"
-                        (validateThenLogin state)
+                        (AutoLogin (untag state).username (untag state).password)
                     , Cmd.none
                     , Nothing
                     )
 
                 Err httpError ->
-                    ( auth
+                    ( Login (setStateRequestStatus state Failure)
                     , newLogR config
                         { logMsg = "Login error: network or system error"
                         , details = Just <| httpErrorToString httpError
@@ -265,6 +256,61 @@ update config msg auth =
             let
                 ( newAuth, cmd, result ) =
                     validateThenVerifyCode state
+            in
+            ( newAuth
+            , Cmd.map config.outMsg cmd
+            , result
+            )
+
+        ( CodeVerification state, CodeVerificationRequestResult res ) ->
+            case res of
+                Ok CodeVerificationSuccess ->
+                    let
+                        ( newAuth, cmd, result ) =
+                            update config (untag state).onVerified auth
+                    in
+                    ( newAuth
+                    , cmd
+                    , result
+                    )
+
+                Ok CodeVerificationFailure ->
+                    ( CodeVerification (setStateRequestStatus state Failure)
+                    , newLogR config
+                        { logMsg = "Code verification failure"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok CodeVerificationTooManyAttemps ->
+                    ( CodeVerification (setStateRequestStatus state Failure)
+                    , newLogR config
+                        { logMsg = "Code verification failure: too many attemps"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Err httpError ->
+                    ( CodeVerification (setStateRequestStatus state Failure)
+                    , newLogR config
+                        { logMsg = "Code verification error: network or system error"
+                        , details = Just <| httpErrorToString httpError
+                        , isError = True
+                        , isImportant = False
+                        }
+                    , Nothing
+                    )
+
+        ( CodeVerification state, AutoLogin username password ) ->
+            let
+                ( newAuth, cmd, result ) =
+                    toLogin state username password True
             in
             ( newAuth
             , Cmd.map config.outMsg cmd
@@ -288,47 +334,55 @@ update config msg auth =
                         state
                         "You need to verify your email address"
                         "/api/confirmEmail"
-                        --(\_ -> toLogin)
-                        (validateThenLogin (initLoginState (untag state).username (untag state).password))
+                        (AutoLogin (untag state).username (untag state).password)
                     , Cmd.none
                     , Nothing
                     )
 
-                --Ok WrongCredentials ->
-                --    ( auth
-                --    , newLogR config
-                --        { logMsg = "Login error: wrong credentials"
-                --        , details = Nothing
-                --        , isError = True
-                --        , isImportant = True
-                --        }
-                --    , Nothing
-                --    )
-                --Ok NeedEmailConfirmation ->
-                --    ( toCodeVerification
-                --        state
-                --        "You need to verify your email address"
-                --        "/api/confirmEmail"
-                --        (validateThenLogin state)
-                --    , Cmd.none
-                --    , Nothing
-                --    )
-                _ ->
+                Ok SignupInvalidEmail ->
                     ( auth
-                    , Cmd.none
+                    , newLogR config
+                        { logMsg = "Signup error: invalid email"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
                     , Nothing
                     )
 
-        --Err httpError ->
-        --    ( auth
-        --    , newLogR config
-        --        { logMsg = "Signup error: network or system error"
-        --        , details = Just <| httpErrorToString httpError
-        --        , isError = True
-        --        , isImportant = False
-        --        }
-        --    , Nothing
-        --    )
+                Ok SignupUserAlreadyExists ->
+                    ( auth
+                    , newLogR config
+                        { logMsg = "Signup error: username already taken"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok SignupTooManyRequests ->
+                    ( auth
+                    , newLogR config
+                        { logMsg = "Signup error: too many requests"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Err httpError ->
+                    ( auth
+                    , newLogR config
+                        { logMsg = "Signup error: network or system error"
+                        , details = Just <| httpErrorToString httpError
+                        , isError = True
+                        , isImportant = False
+                        }
+                    , Nothing
+                    )
+
         ( _, Refresh ) ->
             case getLogInfo auth of
                 LoggedIn _ ->
@@ -359,20 +413,29 @@ update config msg auth =
 setUserName : Auth -> String -> Auth
 setUserName auth name =
     let
-        setStateUserName : String -> State t { a | username : String } -> State t { a | username : String }
-        setStateUserName s state =
+        setStateUserName : State t { a | username : String } -> String -> State t { a | username : String }
+        setStateUserName state s =
             StateMachine.map (\m -> { m | username = s }) state
     in
     case auth of
         Login state ->
-            setStateUserName name state
+            setStateUserName state name
                 |> Login
 
-        --Signup state ->
-        --    setUserName name state
-        --        |> SignUpForm
+        Signup state ->
+            setStateUserName state name
+                |> Signup
+
         _ ->
             auth
+
+
+setStateRequestStatus :
+    State t { a | requestStatus : Status }
+    -> Status
+    -> State t { a | requestStatus : Status }
+setStateRequestStatus state status =
+    StateMachine.map (\m -> { m | requestStatus = status }) state
 
 
 
@@ -399,7 +462,7 @@ initAuth username password =
 initLoginState username password =
     { username = username
     , password = password
-    , loginRequestStatus = Initial
+    , requestStatus = Initial
     , showValidationErrors = False
     , validationErrors = Dict.empty
     }
@@ -468,11 +531,11 @@ toCodeVerification :
     State { a | codeVerification : Allowed } m
     -> String
     -> String
-    -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
+    -> Msg
     -> Auth
 toCodeVerification state notice verificationEndpoint onVerified =
     { code = ""
-    , codeVerificationRequestStatus = Initial
+    , requestStatus = Initial
     , verificationNotice = notice
     , verificationEndpoint = verificationEndpoint
     , onVerified = onVerified
@@ -509,7 +572,7 @@ validateThenLogin (State data) =
                 { data
                     | username = data.username
                     , password = data.password
-                    , loginRequestStatus = Waiting
+                    , requestStatus = Waiting
                 }
                 |> Login
             , login validData
@@ -621,9 +684,9 @@ validateThenVerifyCode (State data) =
                     ( "confirmationCode", "The code is invalid" )
                 , ifTrue
                     (\m ->
-                        m.codeVerificationRequestStatus
+                        m.requestStatus
                             == Waiting
-                            || m.codeVerificationRequestStatus
+                            || m.requestStatus
                             == Success
                     )
                     ( "admin", "Can't verify code now" )
@@ -632,7 +695,7 @@ validateThenVerifyCode (State data) =
             data
     of
         Ok validData ->
-            ( State { data | codeVerificationRequestStatus = Waiting }
+            ( State { data | requestStatus = Waiting }
                 |> CodeVerification
             , verifyCode validData
             , Nothing
@@ -721,7 +784,7 @@ validateThenSignup (State data) =
             data
     of
         Ok validData ->
-            ( State { data | signupRequestStatus = Waiting }
+            ( State { data | requestStatus = Waiting }
                 |> Signup
             , Cmd.none
             , Nothing
