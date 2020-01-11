@@ -225,8 +225,12 @@ view model =
             , Font.size 16
             ]
             (column
-                []
-                [ row [ spacing 15 ]
+                [ spacing 30 ]
+                [ row
+                    [ spacing 15
+                    , padding 15
+                    , alignLeft
+                    ]
                     [ link
                         []
                         { url = UrlBuilder.absolute [] []
@@ -242,6 +246,7 @@ view model =
                     model.url.path
                     (content model)
                     |> Maybe.withDefault Element.none
+                , logsView (List.map Tuple.first (Dict.values model.logs)) model.zone
                 ]
             )
         ]

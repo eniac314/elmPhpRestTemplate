@@ -53,7 +53,8 @@ type Auth
         )
     | CodeVerification
         (State
-            { login : Allowed
+            { codeVerification : Allowed
+            , login : Allowed
             , passwordReset : Allowed
             , userControlPanel : Allowed
             , adminControlPanel : Allowed
@@ -81,6 +82,13 @@ type Auth
             , codeVerification : Allowed
             }
             SignupModel
+        )
+    | Logout
+        (State
+            { logout : Allowed
+            , login : Allowed
+            }
+            LogoutModel
         )
 
 
@@ -147,6 +155,10 @@ type alias SignupModel =
     }
 
 
+type alias LogoutModel =
+    { requestStatus : Status }
+
+
 type alias FieldId =
     String
 
@@ -210,19 +222,24 @@ type Msg
     = SetUsername String
     | SetPassword String
     | SetConfirmPassword String
+    | SetEmail String
     | LoginRequest
-    | ToLogin LoginModel Bool
-    | ToSignup SignupModel
     | LoginRequestResult (Result Http.Error LoginResult)
-    | ToPasswordReset
     | RequestPasswordReset
+    | SetVerificationCode String
     | CodeVerificationRequest
     | CodeVerificationRequestResult (Result Http.Error CodeVerificationResult)
     | SignupRequest
     | SignupRequestResult (Result Http.Error SignupResult)
     | EmailConfirmationResult (Result Http.Error LogInfo)
+    | LogoutRequest
     | Refresh
     | RefreshResult (Result Http.Error Bool)
+    | ToLogin LoginModel Bool
+    | ToCodeVerification CodeVerificationModel
+    | ToSignup SignupModel
+    | ToLogout LogoutModel
+    | ToPasswordReset PasswordResetModel
     | NoOp
 
 
@@ -241,8 +258,26 @@ update config msg auth =
             , Nothing
             )
 
-        ( Login state, ToPasswordReset ) ->
-            ( toPasswordReset state initPasswordResetModel
+        ( _, SetPassword password ) ->
+            ( setPassword auth password
+            , Cmd.none
+            , Nothing
+            )
+
+        ( _, SetConfirmPassword password ) ->
+            ( setConfirmPassword auth password
+            , Cmd.none
+            , Nothing
+            )
+
+        ( _, SetEmail email ) ->
+            ( setEmail auth email
+            , Cmd.none
+            , Nothing
+            )
+
+        ( Login state, ToPasswordReset passwordResetModel ) ->
+            ( toPasswordReset state passwordResetModel
             , Cmd.none
             , Nothing
             )
@@ -279,16 +314,18 @@ update config msg auth =
                 Ok NeedEmailConfirmation ->
                     ( toCodeVerification
                         state
-                        "You need to verify your email address"
-                        "/api/confirmEmail"
-                        (always <|
-                            ToLogin
-                                { initLoginModel
-                                    | username = (untag state).username
-                                    , password = (untag state).password
-                                }
-                                True
-                        )
+                        { initCodeVerificationModel
+                            | verificationNotice = "You need to verify your email address"
+                            , verificationEndpoint = "/api/confirmEmail"
+                            , onVerified =
+                                always <|
+                                    ToLogin
+                                        { initLoginModel
+                                            | username = (untag state).username
+                                            , password = (untag state).password
+                                        }
+                                        True
+                        }
                     , Cmd.none
                     , Nothing
                     )
@@ -303,6 +340,29 @@ update config msg auth =
                         }
                     , Nothing
                     )
+
+        ( Login state, ToLogin loginModel autoLogin ) ->
+            let
+                ( newAuth, cmd, result ) =
+                    toLogin state loginModel autoLogin
+            in
+            ( newAuth
+            , Cmd.map config.outMsg cmd
+            , result
+            )
+
+        ( Login state, ToSignup signupModel ) ->
+            ( toSignup state signupModel
+            , Cmd.none
+            , Nothing
+            )
+
+        ( CodeVerification state, SetVerificationCode code ) ->
+            ( StateMachine.map (\m -> { m | code = code }) state
+                |> CodeVerification
+            , Cmd.none
+            , Nothing
+            )
 
         ( CodeVerification state, CodeVerificationRequest ) ->
             let
@@ -337,10 +397,10 @@ update config msg auth =
                     , Nothing
                     )
 
-                Ok CodeVerificationTooManyAttemps ->
+                Ok CodeVerificationTooManyAttempts ->
                     ( CodeVerification (setStateRequestStatus state Failure)
                     , newLogR config
-                        { logMsg = "Code verification failure: too many attemps"
+                        { logMsg = "Code verification failure: too many attempts"
                         , details = Nothing
                         , isError = True
                         , isImportant = True
@@ -369,6 +429,12 @@ update config msg auth =
             , result
             )
 
+        ( CodeVerification state, ToCodeVerification codeVerificationModel ) ->
+            ( toCodeVerification state codeVerificationModel
+            , Cmd.none
+            , Nothing
+            )
+
         ( Signup state, ToSignup signupModel ) ->
             ( toSignup state signupModel
             , Cmd.none
@@ -390,16 +456,18 @@ update config msg auth =
                 Ok SignupSuccess ->
                     ( toCodeVerification
                         state
-                        "You need to verify your email address"
-                        "/api/confirmEmail"
-                        (always <|
-                            ToLogin
-                                { initLoginModel
-                                    | username = (untag state).username
-                                    , password = (untag state).password
-                                }
-                                True
-                        )
+                        { initCodeVerificationModel
+                            | verificationNotice = "You need to verify your email address"
+                            , verificationEndpoint = "/api/confirmEmail"
+                            , onVerified =
+                                always <|
+                                    ToLogin
+                                        { initLoginModel
+                                            | username = (untag state).username
+                                            , password = (untag state).password
+                                        }
+                                        True
+                        }
                     , Cmd.none
                     , Nothing
                     )
@@ -468,11 +536,26 @@ update config msg auth =
             , Nothing
             )
 
-        _ ->
+        ignoredMsg ->
             ( auth
-            , Cmd.none
+            , newLogR config
+                { logMsg = "Ignored message:"
+                , details = Just <| Debug.toString ignoredMsg
+                , isError = True
+                , isImportant = True
+                }
             , Nothing
             )
+
+
+
+--_ ->
+--    ( auth
+--    , Cmd.none
+--    , Nothing
+--    )
+--validateIfShowError (State state) =
+--    if state.showValidationErrors then
 
 
 setUsername : Auth -> String -> Auth
@@ -490,6 +573,63 @@ setUsername auth name =
         Signup state ->
             setStateUsername state name
                 |> Signup
+
+        _ ->
+            auth
+
+
+setPassword : Auth -> String -> Auth
+setPassword auth name =
+    let
+        setStatePassword state s =
+            StateMachine.map (\m -> { m | password = s }) state
+    in
+    case auth of
+        Login state ->
+            setStatePassword state name
+                |> Login
+
+        Signup state ->
+            setStatePassword state name
+                |> Signup
+
+        _ ->
+            auth
+
+
+setConfirmPassword : Auth -> String -> Auth
+setConfirmPassword auth name =
+    let
+        setStateConfirmPassword state s =
+            StateMachine.map (\m -> { m | confirmPassword = s }) state
+    in
+    case auth of
+        Signup state ->
+            setStateConfirmPassword state name
+                |> Signup
+
+        PasswordReset state ->
+            setStateConfirmPassword state name
+                |> PasswordReset
+
+        _ ->
+            auth
+
+
+setEmail : Auth -> String -> Auth
+setEmail auth name =
+    let
+        setStateEmail state s =
+            StateMachine.map (\m -> { m | email = s }) state
+    in
+    case auth of
+        Signup state ->
+            setStateEmail state name
+                |> Signup
+
+        PasswordReset state ->
+            setStateEmail state name
+                |> PasswordReset
 
         _ ->
             auth
@@ -621,21 +761,24 @@ toLoggedState state userProfile =
                 |> AdminControlPanel
 
 
-toCodeVerification :
-    State { a | codeVerification : Allowed } m
-    -> String
-    -> String
-    -> (Decode.Value -> Msg)
-    -> Auth
-toCodeVerification state notice verificationEndpoint onVerified =
+initCodeVerificationModel : CodeVerificationModel
+initCodeVerificationModel =
     { code = ""
     , requestStatus = Initial
-    , verificationNotice = notice
-    , verificationEndpoint = verificationEndpoint
-    , onVerified = onVerified
+    , verificationNotice = ""
+    , verificationEndpoint = ""
+    , onVerified = always NoOp
     , showValidationErrors = False
     , validationErrors = Dict.empty
     }
+
+
+toCodeVerification :
+    State { a | codeVerification : Allowed } m
+    -> CodeVerificationModel
+    -> Auth
+toCodeVerification state codeVerificationModel =
+    codeVerificationModel
         |> State
         |> CodeVerification
 
@@ -685,6 +828,21 @@ toSignup state signupModel =
         |> Signup
 
 
+initLogoutModel : LogoutModel
+initLogoutModel =
+    { requestStatus = Initial }
+
+
+toLogout :
+    State { a | logout : Allowed } m
+    -> LogoutModel
+    -> Auth
+toLogout state logoutModel =
+    logoutModel
+        |> State
+        |> Logout
+
+
 
 --# ***** State transitions ***** #--
 --# ***************************** #--
@@ -695,13 +853,32 @@ toSignup state signupModel =
 -- # ** Login ** # --
 
 
+validateUsername =
+    ifBlank .username ( "username", "Please enter a username." )
+
+
+validatePassword =
+    ifBlank .password ( "password", "Please enter a password" )
+
+
+validateConfirmPasword =
+    ifBlank .confirmPassword ( "confirmPassword", "Please confirm your password" )
+
+
+validateEmail =
+    Validate.all
+        [ ifBlank .email ( "email", "Please enter an email" )
+        , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
+        ]
+
+
 validateThenLogin : LoginModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
 validateThenLogin data =
     case
         validateErrorDict
             (Validate.all
-                [ ifBlank .username ( "username", "Please enter a username." )
-                , ifBlank .password ( "password", "Please enter a password" )
+                [ validateUsername
+                , validatePassword
                 ]
             )
             data
@@ -875,7 +1052,7 @@ verifyCode validData =
 type CodeVerificationResult
     = CodeVerificationSuccess Decode.Value
     | CodeVerificationFailure
-    | CodeVerificationTooManyAttemps
+    | CodeVerificationTooManyAttempts
 
 
 decodeCodeVerificationResult : Decode.Decoder CodeVerificationResult
@@ -883,7 +1060,7 @@ decodeCodeVerificationResult =
     Decode.oneOf
         [ Decode.field "message" decodeCodeVerificationSuccess
         , Decode.field "serverError" decodeCodeVerificationFailure
-        , Decode.field "serverError" decodeCodeVerificationTooManyAttemps
+        , Decode.field "serverError" decodeCodeVerificationTooManyAttempts
         ]
 
 
@@ -896,8 +1073,8 @@ decodeCodeVerificationFailure =
     decodeConstant "CODE VERIFICATION FAILURE" CodeVerificationFailure
 
 
-decodeCodeVerificationTooManyAttemps =
-    decodeConstant "CODE VERIFICATION TOO MANY ATTEMPS" CodeVerificationTooManyAttemps
+decodeCodeVerificationTooManyAttempts =
+    decodeConstant "CODE VERIFICATION TOO MANY ATTEMPTS" CodeVerificationTooManyAttempts
 
 
 
@@ -907,22 +1084,22 @@ decodeCodeVerificationTooManyAttemps =
 -- # ** Signup ** # --
 
 
+validateSignup =
+    validateErrorDict
+        (Validate.all
+            [ validateUsername
+            , validatePassword
+            , validateConfirmPasword
+            , ifFalse (\m -> m.password == m.confirmPassword)
+                ( "confirmPassword", "Passwords are not matching" )
+            , validateEmail
+            ]
+        )
+
+
 validateThenSignup : State t SignupModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
 validateThenSignup (State data) =
-    case
-        validateErrorDict
-            (Validate.all
-                [ ifBlank .username ( "username", "Please enter a username." )
-                , ifBlank .password ( "password", "Please enter a password" )
-                , ifBlank .confirmPassword ( "confirmPassword", "Please confirm your password" )
-                , ifFalse (\m -> m.password == m.confirmPassword)
-                    ( "confirmPassword", "Passwords are not matching" )
-                , ifBlank .email ( "email", "Please enter an email" )
-                , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
-                ]
-            )
-            data
-    of
+    case validateSignup data of
         Ok validData ->
             ( State { data | requestStatus = Waiting }
                 |> Signup
@@ -1055,73 +1232,224 @@ view config auth =
             Signup state ->
                 signupView config (untag state)
 
+            Logout state ->
+                logoutView config (untag state)
+
 
 loginView : ViewConfig msg -> LoginModel -> Element Msg
-loginView config state =
-    Element.none
+loginView config model =
+    let
+        status =
+            model.requestStatus
+
+        initialView =
+            column
+                [ spacing 15 ]
+                [ customInput
+                    { label = "Username: "
+                    , value = model.username
+                    , tag = "username"
+                    , handler = SetUsername
+                    }
+                    model
+                , customCurrentPasswordInput
+                    { label = "Password: "
+                    , value = model.password
+                    , tag = "password"
+                    , handler = SetPassword
+                    }
+                    model
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress = Just LoginRequest
+                        , label = text "Log in"
+                        }
+                    , Input.button (buttonStyle True)
+                        { onPress = Just <| ToSignup initSignupModel
+                        , label = text "New user signup"
+                        }
+                    ]
+                ]
+
+        waitingView =
+            column
+                [ spacing 15 ]
+                [ text "Traitement en cours, veuillez patienter" ]
+
+        successView =
+            column
+                [ spacing 15 ]
+                [ text "Connexion réussie!"
+                ]
+
+        failureView =
+            column
+                [ spacing 15 ]
+                [ text "Echec Connexion!"
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress =
+                            Just <| ToLogin { model | requestStatus = Initial } False
+                        , label = text "Réessayer"
+                        }
+                    ]
+                ]
+    in
+    column
+        [ padding 15
+        , spacing 15
+        , Font.size 16
+        , alignTop
+        ]
+        [ text "Connexion: "
+        , case status of
+            Initial ->
+                initialView
+
+            Waiting ->
+                waitingView
+
+            Success ->
+                successView
+
+            Failure ->
+                failureView
+        ]
 
 
 passwordResetView : ViewConfig msg -> PasswordResetModel -> Element Msg
-passwordResetView config state =
+passwordResetView config model =
     Element.none
 
 
 codeVerificationView : ViewConfig msg -> CodeVerificationModel -> Element Msg
-codeVerificationView config state =
-    Element.none
-
-
-userControlView : ViewConfig msg -> UserControlPanelModel -> Element Msg
-userControlView config state =
-    Element.none
-
-
-adminControlView : ViewConfig msg -> AdminControlPanelModel -> Element Msg
-adminControlView config state =
-    Element.none
-
-
-signupView : ViewConfig msg -> SignupModel -> Element Msg
-signupView config state =
+codeVerificationView config model =
     let
         status =
-            state.requestStatus
+            model.requestStatus
 
         initialView =
             column
                 [ spacing 15 ]
                 [ Input.text textInputStyle
                     { onChange =
-                        SetUsername
+                        SetVerificationCode
                     , text =
-                        state.username
+                        model.code
                     , placeholder = Nothing
                     , label =
-                        Input.labelLeft [ centerY ]
-                            (el [ width (px 110) ] (text "Username: "))
+                        Input.labelAbove [ centerY ]
+                            (el [ width (px 110) ] (text "Input verification code: "))
                     }
-                , Input.newPassword textInputStyle
-                    { onChange =
-                        SetPassword
-                    , text =
-                        state.password
-                    , placeholder = Nothing
-                    , label =
-                        Input.labelLeft [ centerY ]
-                            (el [ width (px 110) ] (text "Password: "))
-                    , show = False
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress = Just CodeVerificationRequest
+                        , label = text "Send"
+                        }
+                    ]
+                ]
+
+        waitingView =
+            column
+                [ spacing 15 ]
+                [ text "Processing request, please wait" ]
+
+        successView =
+            column
+                [ spacing 15 ]
+                [ text "Code verification success"
+                ]
+
+        failureView =
+            column
+                [ spacing 15 ]
+                [ text "Could not verify code"
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress =
+                            Just <| ToCodeVerification model
+                        , label = text "Try again"
+                        }
+                    ]
+                ]
+    in
+    column
+        [ padding 15
+        , spacing 15
+        , Font.size 16
+        , alignTop
+        ]
+        [ text model.verificationNotice
+        , case status of
+            Initial ->
+                initialView
+
+            Waiting ->
+                waitingView
+
+            Success ->
+                successView
+
+            Failure ->
+                failureView
+        ]
+
+
+userControlView : ViewConfig msg -> UserControlPanelModel -> Element Msg
+userControlView config model =
+    Element.none
+
+
+adminControlView : ViewConfig msg -> AdminControlPanelModel -> Element Msg
+adminControlView config model =
+    Element.none
+
+
+signupView : ViewConfig msg -> SignupModel -> Element Msg
+signupView config model =
+    let
+        model_ =
+            case ( model.showValidationErrors, validateSignup model ) of
+                ( True, Err validationErrors ) ->
+                    { model | validationErrors = validationErrors }
+
+                _ ->
+                    model
+
+        status =
+            model_.requestStatus
+
+        initialView =
+            column
+                [ spacing 15 ]
+                [ customInput
+                    { label = "Username: "
+                    , value = model_.username
+                    , tag = "username"
+                    , handler = SetUsername
                     }
-                , Input.newPassword textInputStyle
-                    { onChange =
-                        SetConfirmPassword
-                    , text =
-                        state.confirmPassword
-                    , placeholder = Nothing
-                    , label =
-                        Input.labelLeft [ centerY ]
-                            (el [ width (px 110) ] (text "Confirm password: "))
-                    , show = False
+                    model_
+                , customInput
+                    { label = "Email: "
+                    , value = model_.email
+                    , tag = "email"
+                    , handler = SetEmail
                     }
+                    model_
+                , customCurrentPasswordInput
+                    { label = "Password: "
+                    , value = model_.password
+                    , tag = "password"
+                    , handler = SetPassword
+                    }
+                    model_
+                , customCurrentPasswordInput
+                    { label = "Confirm password: "
+                    , value = model_.confirmPassword
+                    , tag = "confirmPassword"
+                    , handler = SetConfirmPassword
+                    }
+                    model_
                 , row
                     [ spacing 15 ]
                     [ Input.button (buttonStyle True)
@@ -1182,6 +1510,171 @@ signupView config state =
             Failure ->
                 failureView
         ]
+
+
+logoutView : ViewConfig msg -> LogoutModel -> Element Msg
+logoutView config model =
+    let
+        status =
+            model.requestStatus
+
+        initialView =
+            column
+                [ spacing 15 ]
+                [ Input.button (buttonStyle True)
+                    { onPress = Just LogoutRequest
+                    , label = text "Log out"
+                    }
+                ]
+
+        waitingView =
+            column
+                [ spacing 15 ]
+                [ text "Processing request, please wait" ]
+
+        successView =
+            column
+                [ spacing 15 ]
+                [ text "Logout successful!"
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress = Just <| ToLogin initLoginModel False
+                        , label = text "Log in"
+                        }
+                    ]
+                ]
+
+        failureView =
+            column
+                [ spacing 15 ]
+                [ text "Logout failure!"
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress =
+                            Just <| ToLogout initLogoutModel
+                        , label = text "Try again"
+                        }
+                    ]
+                ]
+    in
+    column
+        [ padding 15
+        , spacing 15
+        , Font.size 16
+        , alignTop
+        ]
+        [ text "Logout: "
+        , case status of
+            Initial ->
+                initialView
+
+            Waiting ->
+                waitingView
+
+            Success ->
+                successView
+
+            Failure ->
+                failureView
+        ]
+
+
+
+-- Misc
+
+
+type alias CustomInputConfig =
+    { label : String
+    , value : String
+    , tag : String
+    , handler : String -> Msg
+    }
+
+
+customInput :
+    CustomInputConfig
+    -> { a | validationErrors : ValidationErrors, showValidationErrors : Bool }
+    -> Element Msg
+customInput config model =
+    column
+        [ spacing 15 ]
+        [ Input.text textInputStyle
+            { onChange =
+                config.handler
+            , text =
+                config.value
+            , placeholder = Nothing
+            , label =
+                Input.labelAbove [ centerY ]
+                    (el [ width (px 110) ] (text <| config.label))
+            }
+        , errorView config model
+        ]
+
+
+customCurrentPasswordInput :
+    CustomInputConfig
+    -> { a | validationErrors : ValidationErrors, showValidationErrors : Bool }
+    -> Element Msg
+customCurrentPasswordInput config model =
+    column
+        [ spacing 15 ]
+        [ Input.currentPassword textInputStyle
+            { onChange =
+                config.handler
+            , text =
+                config.value
+            , placeholder = Nothing
+            , label =
+                Input.labelAbove [ centerY ]
+                    (el [ width (px 110) ] (text <| config.label))
+            , show = False
+            }
+        , errorView config model
+        ]
+
+
+customEmailInput :
+    CustomInputConfig
+    -> { a | validationErrors : ValidationErrors, showValidationErrors : Bool }
+    -> Element Msg
+customEmailInput config model =
+    column
+        [ spacing 15 ]
+        [ Input.email textInputStyle
+            { onChange =
+                config.handler
+            , text =
+                config.value
+            , placeholder = Nothing
+            , label =
+                Input.labelAbove [ centerY ]
+                    (el [ width (px 110) ] (text <| config.label))
+            }
+        , errorView config model
+        ]
+
+
+errorView :
+    CustomInputConfig
+    -> { a | validationErrors : ValidationErrors, showValidationErrors : Bool }
+    -> Element Msg
+errorView config model =
+    case
+        ( model.showValidationErrors
+        , Dict.get config.tag model.validationErrors
+        )
+    of
+        ( True, Just errors ) ->
+            column
+                [ Font.color (Element.rgb 1 0 0)
+                , Font.size 12
+                , spacing 10
+                ]
+                (List.map text errors)
+
+        _ ->
+            Element.none
 
 
 
