@@ -1,6 +1,6 @@
 module Main exposing (..)
 
-import Auth.AuthPlugin as Auth
+import Auth.Auth as Auth
 import Browser exposing (..)
 import Browser.Events exposing (Visibility(..), onResize, onVisibilityChange)
 import Browser.Navigation as Nav
@@ -31,7 +31,7 @@ subscriptions model =
     Sub.batch
         [ onResize WinResize
         , onVisibilityChange VisibilityChange
-        , Auth.subscriptions model.authPlugin
+        , Auth.subscriptions AuthMsg model.authPlugin
         ]
 
 
@@ -56,7 +56,7 @@ type alias Model =
     , zone : Time.Zone
     , seed : Random.Seed
     , logs : Dict.Dict Int ( Log, Bool )
-    , authPlugin : Auth.Model Msg
+    , authPlugin : Auth.Auth
     }
 
 
@@ -102,7 +102,7 @@ init : Flags -> Url.Url -> Nav.Key -> ( Model, Cmd Msg )
 init flags url key =
     let
         ( authPlugin, authCmd ) =
-            Auth.init AuthMsg
+            Auth.init
     in
     ( { device = classifyDevice { width = flags.width, height = flags.height }
       , width = flags.width
@@ -176,7 +176,12 @@ update msg model =
                     Auth.getLogInfo newAuthPlugin
 
                 ( newAuthPlugin, authToolCmds, mbPluginResult ) =
-                    Auth.update { addLog = AddLog } authPluginMsg model.authPlugin
+                    Auth.update
+                        { addLogMsg = AddLog
+                        , outMsg = AuthMsg
+                        }
+                        authPluginMsg
+                        model.authPlugin
             in
             ( { model
                 | authPlugin = newAuthPlugin
@@ -264,6 +269,6 @@ content model =
                 , centerY
                 , Background.color white
                 ]
-                [ Auth.view { zone = model.zone } model.authPlugin ]
+                [ Auth.view { outMsg = AuthMsg } model.authPlugin ]
           )
         ]

@@ -1,7 +1,25 @@
-module Auth.Auth exposing (..)
+module Auth.Auth exposing
+    ( Auth
+    , LogInfo(..)
+    , Msg
+    , getLogInfo
+    , init
+    , isLogged
+    , subscriptions
+    , update
+    , view
+    )
 
 import Dict exposing (..)
 import Dict.Extra exposing (fromListDedupe)
+import Element exposing (..)
+import Element.Background as Background
+import Element.Border as Border
+import Element.Events as Events
+import Element.Font as Font
+import Element.Input as Input
+import Element.Lazy as Lazy
+import Element.Region as Region
 import Http exposing (Error)
 import Internal.Helpers exposing (PluginResult(..), Status(..), httpErrorToString)
 import Internal.Logger exposing (..)
@@ -9,6 +27,8 @@ import Json.Decode as Decode
 import Json.Decode.Pipeline as Pipeline exposing (..)
 import Json.Encode as Encode
 import StateMachine exposing (Allowed, State(..), untag)
+import Style.Helpers exposing (buttonStyle, textInputStyle)
+import Time exposing (every)
 import Validate exposing (..)
 
 
@@ -56,7 +76,8 @@ type Auth
         )
     | Signup
         (State
-            { login : Allowed
+            { signup : Allowed
+            , login : Allowed
             , codeVerification : Allowed
             }
             SignupModel
@@ -73,9 +94,12 @@ type alias LoginModel =
 
 
 type alias PasswordResetModel =
-    { password : String
+    { email : String
+    , password : String
     , confirmPassword : String
-    , passwordReset : Bool
+    , encryptedSelectorAndToken : String
+    , passwordResetStatus : Status
+    , newPasswordRegistrationStatus : Status
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
     }
@@ -86,7 +110,7 @@ type alias CodeVerificationModel =
     , requestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
-    , onVerified : Msg
+    , onVerified : Decode.Value -> Msg
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
     }
@@ -167,16 +191,31 @@ getLogInfo auth =
             LoggedOut
 
 
+isLogged : LogInfo -> Bool
+isLogged logInfo =
+    case logInfo of
+        LoggedIn _ ->
+            True
+
+        _ ->
+            False
+
+
 type Role
     = Admin
     | User
 
 
 type Msg
-    = SetUserName String
+    = SetUsername String
+    | SetPassword String
+    | SetConfirmPassword String
     | LoginRequest
-    | AutoLogin String String
+    | ToLogin LoginModel Bool
+    | ToSignup SignupModel
     | LoginRequestResult (Result Http.Error LoginResult)
+    | ToPasswordReset
+    | RequestPasswordReset
     | CodeVerificationRequest
     | CodeVerificationRequestResult (Result Http.Error CodeVerificationResult)
     | SignupRequest
@@ -196,8 +235,14 @@ type alias UpdateConfig msg =
 update : UpdateConfig msg -> Msg -> Auth -> ( Auth, Cmd msg, Maybe (PluginResult LogInfo) )
 update config msg auth =
     case ( auth, msg ) of
-        ( _, SetUserName name ) ->
-            ( setUserName auth name
+        ( _, SetUsername name ) ->
+            ( setUsername auth name
+            , Cmd.none
+            , Nothing
+            )
+
+        ( Login state, ToPasswordReset ) ->
+            ( toPasswordReset state initPasswordResetModel
             , Cmd.none
             , Nothing
             )
@@ -205,7 +250,7 @@ update config msg auth =
         ( Login state, LoginRequest ) ->
             let
                 ( newAuth, cmd, result ) =
-                    validateThenLogin state
+                    validateThenLogin (untag state)
             in
             ( newAuth
             , Cmd.map config.outMsg cmd
@@ -236,7 +281,14 @@ update config msg auth =
                         state
                         "You need to verify your email address"
                         "/api/confirmEmail"
-                        (AutoLogin (untag state).username (untag state).password)
+                        (always <|
+                            ToLogin
+                                { initLoginModel
+                                    | username = (untag state).username
+                                    , password = (untag state).password
+                                }
+                                True
+                        )
                     , Cmd.none
                     , Nothing
                     )
@@ -264,10 +316,10 @@ update config msg auth =
 
         ( CodeVerification state, CodeVerificationRequestResult res ) ->
             case res of
-                Ok CodeVerificationSuccess ->
+                Ok (CodeVerificationSuccess payload) ->
                     let
                         ( newAuth, cmd, result ) =
-                            update config (untag state).onVerified auth
+                            update config ((untag state).onVerified payload) auth
                     in
                     ( newAuth
                     , cmd
@@ -307,14 +359,20 @@ update config msg auth =
                     , Nothing
                     )
 
-        ( CodeVerification state, AutoLogin username password ) ->
+        ( CodeVerification state, ToLogin loginModel autoLogin ) ->
             let
                 ( newAuth, cmd, result ) =
-                    toLogin state username password True
+                    toLogin state loginModel autoLogin
             in
             ( newAuth
             , Cmd.map config.outMsg cmd
             , result
+            )
+
+        ( Signup state, ToSignup signupModel ) ->
+            ( toSignup state signupModel
+            , Cmd.none
+            , Nothing
             )
 
         ( Signup state, SignupRequest ) ->
@@ -334,7 +392,14 @@ update config msg auth =
                         state
                         "You need to verify your email address"
                         "/api/confirmEmail"
-                        (AutoLogin (untag state).username (untag state).password)
+                        (always <|
+                            ToLogin
+                                { initLoginModel
+                                    | username = (untag state).username
+                                    , password = (untag state).password
+                                }
+                                True
+                        )
                     , Cmd.none
                     , Nothing
                     )
@@ -410,20 +475,20 @@ update config msg auth =
             )
 
 
-setUserName : Auth -> String -> Auth
-setUserName auth name =
+setUsername : Auth -> String -> Auth
+setUsername auth name =
     let
-        setStateUserName : State t { a | username : String } -> String -> State t { a | username : String }
-        setStateUserName state s =
+        setStateUsername : State t { a | username : String } -> String -> State t { a | username : String }
+        setStateUsername state s =
             StateMachine.map (\m -> { m | username = s }) state
     in
     case auth of
         Login state ->
-            setStateUserName state name
+            setStateUsername state name
                 |> Login
 
         Signup state ->
-            setStateUserName state name
+            setStateUsername state name
                 |> Signup
 
         _ ->
@@ -438,6 +503,24 @@ setStateRequestStatus state status =
     StateMachine.map (\m -> { m | requestStatus = status }) state
 
 
+subscriptions : (Msg -> msg) -> Auth -> Sub msg
+subscriptions outMsg auth =
+    let
+        refreshSub =
+            Time.every (30 * 1000) (\_ -> Refresh)
+    in
+    Sub.map outMsg <|
+        case auth of
+            AdminControlPanel _ ->
+                Time.every (30 * 1000) (\_ -> Refresh)
+
+            UserControlPanel _ ->
+                Time.every (30 * 1000) (\_ -> Refresh)
+
+            _ ->
+                Sub.none
+
+
 
 --setAdminError : Auth -> String -> Auth
 --setAdminError auth error =
@@ -447,50 +530,73 @@ setStateRequestStatus state status =
 --# ***** State transitions ***** #--
 
 
+init : ( Auth, Cmd msg )
 init =
     ( initAuth "" ""
     , Cmd.none
-    , Nothing
     )
 
 
+initAuth : String -> String -> Auth
 initAuth username password =
-    initLoginState username password
+    { initLoginModel
+        | username = username
+        , password = password
+    }
+        |> State
         |> Login
 
 
-initLoginState username password =
-    { username = username
-    , password = password
+initLoginModel : LoginModel
+initLoginModel =
+    { username = ""
+    , password = ""
     , requestStatus = Initial
     , showValidationErrors = False
     , validationErrors = Dict.empty
     }
-        |> State
 
 
 toLogin :
     State { a | login : Allowed } m
-    -> String
-    -> String
+    -> LoginModel
     -> Bool
     -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
-toLogin state username password autoLogin =
+toLogin _ state autoLogin =
     let
-        newState =
-            initLoginState username password
-
         newAuth =
-            Login newState
+            Login (State state)
 
         result =
             if autoLogin then
-                validateThenLogin newState
+                validateThenLogin state
 
             else
                 ( newAuth, Cmd.none, Nothing )
     in
     result
+
+
+initUserControlPanelModel : UserProfile -> UserControlPanelModel
+initUserControlPanelModel userProfile =
+    { newEmail = ""
+    , password = ""
+    , confirmPassword = ""
+    , userProfile = userProfile
+    , showValidationErrors = False
+    , validationErrors = Dict.empty
+    }
+
+
+initAdminControlPanelModel : UserProfile -> AdminControlPanelModel
+initAdminControlPanelModel userProfile =
+    { newEmail = ""
+    , password = ""
+    , confirmPassword = ""
+    , userProfile = userProfile
+    , showValidationErrors = False
+    , validationErrors = Dict.empty
+    }
 
 
 toLoggedState :
@@ -505,24 +611,12 @@ toLoggedState :
 toLoggedState state userProfile =
     case userProfile.role of
         User ->
-            { newEmail = ""
-            , password = ""
-            , confirmPassword = ""
-            , userProfile = userProfile
-            , showValidationErrors = False
-            , validationErrors = Dict.empty
-            }
+            initUserControlPanelModel userProfile
                 |> State
                 |> UserControlPanel
 
         Admin ->
-            { newEmail = ""
-            , password = ""
-            , confirmPassword = ""
-            , userProfile = userProfile
-            , showValidationErrors = False
-            , validationErrors = Dict.empty
-            }
+            initAdminControlPanelModel userProfile
                 |> State
                 |> AdminControlPanel
 
@@ -531,7 +625,7 @@ toCodeVerification :
     State { a | codeVerification : Allowed } m
     -> String
     -> String
-    -> Msg
+    -> (Decode.Value -> Msg)
     -> Auth
 toCodeVerification state notice verificationEndpoint onVerified =
     { code = ""
@@ -546,6 +640,51 @@ toCodeVerification state notice verificationEndpoint onVerified =
         |> CodeVerification
 
 
+initPasswordResetModel : PasswordResetModel
+initPasswordResetModel =
+    { email = ""
+    , password = ""
+    , confirmPassword = ""
+    , encryptedSelectorAndToken = ""
+    , passwordResetStatus = Initial
+    , newPasswordRegistrationStatus = Initial
+    , showValidationErrors = False
+    , validationErrors = Dict.empty
+    }
+
+
+toPasswordReset :
+    State { a | passwordReset : Allowed } m
+    -> PasswordResetModel
+    -> Auth
+toPasswordReset state passwordResetModel =
+    passwordResetModel
+        |> State
+        |> PasswordReset
+
+
+initSignupModel : SignupModel
+initSignupModel =
+    { username = ""
+    , email = ""
+    , password = ""
+    , confirmPassword = ""
+    , requestStatus = Initial
+    , showValidationErrors = False
+    , validationErrors = Dict.empty
+    }
+
+
+toSignup :
+    State { a | signup : Allowed } m
+    -> SignupModel
+    -> Auth
+toSignup state signupModel =
+    signupModel
+        |> State
+        |> Signup
+
+
 
 --# ***** State transitions ***** #--
 --# ***************************** #--
@@ -556,8 +695,8 @@ toCodeVerification state notice verificationEndpoint onVerified =
 -- # ** Login ** # --
 
 
-validateThenLogin : State t LoginModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
-validateThenLogin (State data) =
+validateThenLogin : LoginModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
+validateThenLogin data =
     case
         validateErrorDict
             (Validate.all
@@ -734,7 +873,7 @@ verifyCode validData =
 
 
 type CodeVerificationResult
-    = CodeVerificationSuccess
+    = CodeVerificationSuccess Decode.Value
     | CodeVerificationFailure
     | CodeVerificationTooManyAttemps
 
@@ -749,7 +888,8 @@ decodeCodeVerificationResult =
 
 
 decodeCodeVerificationSuccess =
-    decodeConstant "CODE VERIFICATION SUCCESSFUL" CodeVerificationSuccess
+    Decode.field "codeVerificationPayload" Decode.value
+        |> Decode.map CodeVerificationSuccess
 
 
 decodeCodeVerificationFailure =
@@ -879,3 +1019,172 @@ decodeConstant c v =
                 else
                     Decode.fail "wrong constant"
             )
+
+
+
+--# ***** Http requests and validation ***** #--
+--# **************************************** #--
+-------------------------------------------------------------------------------
+--# ************************** #--
+--# ***** View functions ***** #--
+
+
+type alias ViewConfig msg =
+    { outMsg : Msg -> msg }
+
+
+view : ViewConfig msg -> Auth -> Element msg
+view config auth =
+    Element.map config.outMsg <|
+        case auth of
+            Login state ->
+                loginView config (untag state)
+
+            PasswordReset state ->
+                passwordResetView config (untag state)
+
+            CodeVerification state ->
+                codeVerificationView config (untag state)
+
+            UserControlPanel state ->
+                userControlView config (untag state)
+
+            AdminControlPanel state ->
+                adminControlView config (untag state)
+
+            Signup state ->
+                signupView config (untag state)
+
+
+loginView : ViewConfig msg -> LoginModel -> Element Msg
+loginView config state =
+    Element.none
+
+
+passwordResetView : ViewConfig msg -> PasswordResetModel -> Element Msg
+passwordResetView config state =
+    Element.none
+
+
+codeVerificationView : ViewConfig msg -> CodeVerificationModel -> Element Msg
+codeVerificationView config state =
+    Element.none
+
+
+userControlView : ViewConfig msg -> UserControlPanelModel -> Element Msg
+userControlView config state =
+    Element.none
+
+
+adminControlView : ViewConfig msg -> AdminControlPanelModel -> Element Msg
+adminControlView config state =
+    Element.none
+
+
+signupView : ViewConfig msg -> SignupModel -> Element Msg
+signupView config state =
+    let
+        status =
+            state.requestStatus
+
+        initialView =
+            column
+                [ spacing 15 ]
+                [ Input.text textInputStyle
+                    { onChange =
+                        SetUsername
+                    , text =
+                        state.username
+                    , placeholder = Nothing
+                    , label =
+                        Input.labelLeft [ centerY ]
+                            (el [ width (px 110) ] (text "Username: "))
+                    }
+                , Input.newPassword textInputStyle
+                    { onChange =
+                        SetPassword
+                    , text =
+                        state.password
+                    , placeholder = Nothing
+                    , label =
+                        Input.labelLeft [ centerY ]
+                            (el [ width (px 110) ] (text "Password: "))
+                    , show = False
+                    }
+                , Input.newPassword textInputStyle
+                    { onChange =
+                        SetConfirmPassword
+                    , text =
+                        state.confirmPassword
+                    , placeholder = Nothing
+                    , label =
+                        Input.labelLeft [ centerY ]
+                            (el [ width (px 110) ] (text "Confirm password: "))
+                    , show = False
+                    }
+                , row
+                    [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress = Just SignupRequest
+                        , label = text "Send"
+                        }
+                    , Input.button (buttonStyle True)
+                        { onPress = Just <| ToLogin initLoginModel False
+                        , label = text "Back"
+                        }
+                    ]
+                ]
+
+        waitingView =
+            column
+                [ spacing 15 ]
+                [ text "Processing request, please wait" ]
+
+        successView =
+            column
+                [ spacing 15 ]
+                [ text "Signup successful!" ]
+
+        failureView =
+            column
+                [ spacing 15 ]
+                [ text "Signup failure!"
+                , row [ spacing 15 ]
+                    [ Input.button (buttonStyle True)
+                        { onPress =
+                            Just <| ToSignup initSignupModel
+                        , label = text "Réessayer"
+                        }
+                    , Input.button (buttonStyle True)
+                        { onPress = Just <| ToLogin initLoginModel False
+                        , label = text "Retour"
+                        }
+                    ]
+                ]
+    in
+    column
+        [ padding 15
+        , spacing 15
+        , Font.size 16
+        , alignTop
+        ]
+        [ text "New user signup:"
+        , case status of
+            Initial ->
+                initialView
+
+            Waiting ->
+                waitingView
+
+            Success ->
+                successView
+
+            Failure ->
+                failureView
+        ]
+
+
+
+--# ***** View functions ***** #--
+--# ************************** #--
+-------------------------------------------------------------------------------
