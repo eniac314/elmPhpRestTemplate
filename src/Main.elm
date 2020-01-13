@@ -246,7 +246,7 @@ view model =
                     model.url.path
                     (content model)
                     |> Maybe.withDefault Element.none
-                , logsView (List.map Tuple.first (Dict.values model.logs)) model.zone
+                , logsView (List.reverse <| List.map Tuple.first (Dict.values model.logs)) model.zone
                 ]
             )
         ]

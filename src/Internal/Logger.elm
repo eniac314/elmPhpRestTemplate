@@ -5,6 +5,7 @@ import Element exposing (..)
 import Element.Background as Background
 import Element.Events as Events
 import Element.Font as Font
+import Html exposing (pre, text)
 import Murmur3 exposing (hashString)
 import Random exposing (Seed, int, step)
 import Style.Helpers exposing (noAttr, sides)
@@ -97,7 +98,7 @@ formatTime =
 logTitleView l zone =
     row [ spacing 15 ]
         [ el [ Font.color (rgb 0.7 0.7 0.7) ]
-            (text <|
+            (Element.text <|
                 formatTime (Time.toHour zone l.timeStamp)
                     ++ ":"
                     ++ formatTime (Time.toMinute zone l.timeStamp)
@@ -109,7 +110,7 @@ logTitleView l zone =
               else
                 noAttr
             ]
-            (text l.message)
+            (Element.text l.message)
         ]
 
 
@@ -127,11 +128,11 @@ logsView logs zone =
                         Element.none
 
                     Just details ->
-                        paragraph
+                        el
                             [ paddingEach { sides | left = 20 }
                             , Font.size 12
                             ]
-                            [ text details ]
+                            (el [] (html <| Html.pre [] [ Html.text details ]))
                 ]
     in
     column [ spacing 15 ]
@@ -167,7 +168,7 @@ logsDictView logs zone toogleLog =
                                 [ paddingEach { sides | left = 20 }
                                 , Font.size 12
                                 ]
-                                [ text details ]
+                                [ Element.text details ]
 
                         else
                             Element.none

@@ -7,6 +7,7 @@ module Auth.Auth exposing
     , isLogged
     , subscriptions
     , update
+    , validateModelIfShowError
     , view
     )
 
@@ -115,6 +116,8 @@ type alias PasswordResetModel =
 
 type alias CodeVerificationModel =
     { code : String
+    , email : String
+    , askForEmail : Bool
     , requestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
@@ -300,7 +303,7 @@ update config msg auth =
                     , Nothing
                     )
 
-                Ok WrongCredentials ->
+                Ok LoginWrongCredentials ->
                     ( Login (setStateRequestStatus state Failure)
                     , newLogR config
                         { logMsg = "Login error: wrong credentials"
@@ -311,12 +314,24 @@ update config msg auth =
                     , Nothing
                     )
 
-                Ok NeedEmailConfirmation ->
+                Ok LoginTooManyRequests ->
+                    ( Login (setStateRequestStatus state Failure)
+                    , newLogR config
+                        { logMsg = "Login error: too many requests"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok LoginNeedEmailConfirmation ->
                     ( toCodeVerification
                         state
                         { initCodeVerificationModel
                             | verificationNotice = "You need to verify your email address"
                             , verificationEndpoint = "/api/confirmEmail"
+                            , askForEmail = True
                             , onVerified =
                                 always <|
                                     ToLogin
@@ -455,10 +470,11 @@ update config msg auth =
             case res of
                 Ok SignupSuccess ->
                     ( toCodeVerification
-                        state
+                        (setStateRequestStatus state Success)
                         { initCodeVerificationModel
                             | verificationNotice = "You need to verify your email address"
                             , verificationEndpoint = "/api/confirmEmail"
+                            , email = (untag state).email
                             , onVerified =
                                 always <|
                                     ToLogin
@@ -473,7 +489,7 @@ update config msg auth =
                     )
 
                 Ok SignupInvalidEmail ->
-                    ( auth
+                    ( Signup <| setStateRequestStatus state Failure
                     , newLogR config
                         { logMsg = "Signup error: invalid email"
                         , details = Nothing
@@ -484,9 +500,9 @@ update config msg auth =
                     )
 
                 Ok SignupUserAlreadyExists ->
-                    ( auth
+                    ( Signup <| setStateRequestStatus state Failure
                     , newLogR config
-                        { logMsg = "Signup error: username already taken"
+                        { logMsg = "Signup error: user already exists"
                         , details = Nothing
                         , isError = True
                         , isImportant = True
@@ -495,7 +511,7 @@ update config msg auth =
                     )
 
                 Ok SignupTooManyRequests ->
-                    ( auth
+                    ( Signup <| setStateRequestStatus state Failure
                     , newLogR config
                         { logMsg = "Signup error: too many requests"
                         , details = Nothing
@@ -505,8 +521,19 @@ update config msg auth =
                     , Nothing
                     )
 
+                Ok SignupInvalidPassword ->
+                    ( Signup <| setStateRequestStatus state Failure
+                    , newLogR config
+                        { logMsg = "Signup error: invalid password"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
                 Err httpError ->
-                    ( auth
+                    ( Signup <| setStateRequestStatus state Failure
                     , newLogR config
                         { logMsg = "Signup error: network or system error"
                         , details = Just <| httpErrorToString httpError
@@ -617,19 +644,23 @@ setConfirmPassword auth name =
 
 
 setEmail : Auth -> String -> Auth
-setEmail auth name =
+setEmail auth email =
     let
         setStateEmail state s =
             StateMachine.map (\m -> { m | email = s }) state
     in
     case auth of
         Signup state ->
-            setStateEmail state name
+            setStateEmail state email
                 |> Signup
 
         PasswordReset state ->
-            setStateEmail state name
+            setStateEmail state email
                 |> PasswordReset
+
+        CodeVerification state ->
+            setStateEmail state email
+                |> CodeVerification
 
         _ ->
             auth
@@ -764,6 +795,8 @@ toLoggedState state userProfile =
 initCodeVerificationModel : CodeVerificationModel
 initCodeVerificationModel =
     { code = ""
+    , email = ""
+    , askForEmail = False
     , requestStatus = Initial
     , verificationNotice = ""
     , verificationEndpoint = ""
@@ -853,41 +886,16 @@ toLogout state logoutModel =
 -- # ** Login ** # --
 
 
-validateUsername =
-    ifBlank .username ( "username", "Please enter a username." )
-
-
-validatePassword =
-    ifBlank .password ( "password", "Please enter a password" )
-
-
-validateConfirmPasword =
-    ifBlank .confirmPassword ( "confirmPassword", "Please confirm your password" )
-
-
-validateEmail =
-    Validate.all
-        [ ifBlank .email ( "email", "Please enter an email" )
-        , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
-        ]
-
-
 validateThenLogin : LoginModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
-validateThenLogin data =
+validateThenLogin model =
     case
-        validateErrorDict
-            (Validate.all
-                [ validateUsername
-                , validatePassword
-                ]
-            )
-            data
+        validateLogin model
     of
         Ok validData ->
             ( State
-                { data
-                    | username = data.username
-                    , password = data.password
+                { model
+                    | username = model.username
+                    , password = model.password
                     , requestStatus = Waiting
                 }
                 |> Login
@@ -896,7 +904,7 @@ validateThenLogin data =
             )
 
         Err errors ->
-            ( State { data | showValidationErrors = True, validationErrors = errors }
+            ( State { model | showValidationErrors = True }
                 |> Login
             , Cmd.none
             , Nothing
@@ -929,8 +937,9 @@ login validData =
 
 type LoginResult
     = LoginSuccess UserProfile
-    | WrongCredentials
-    | NeedEmailConfirmation
+    | LoginWrongCredentials
+    | LoginNeedEmailConfirmation
+    | LoginTooManyRequests
 
 
 decodeLoginResult : Decode.Decoder LoginResult
@@ -938,17 +947,22 @@ decodeLoginResult =
     Decode.oneOf
         [ Decode.field "message" decodeUserProfile
             |> Decode.map LoginSuccess
-        , Decode.field "message" decodeWrongCredentials
-        , Decode.field "message" decodeNeedEmailConfirmation
+        , Decode.field "serverError" decodeLoginWrongCredentials
+        , Decode.field "serverError" decodeLoginNeedEmailConfirmation
+        , Decode.field "serverError" decodeLoginTooManyRequests
         ]
 
 
-decodeWrongCredentials =
-    decodeConstant "WRONG CREDENTIALS" WrongCredentials
+decodeLoginWrongCredentials =
+    decodeConstant "WRONG CREDENTIALS" LoginWrongCredentials
 
 
-decodeNeedEmailConfirmation =
-    decodeConstant "NEED EMAIL CONFIRMATION" NeedEmailConfirmation
+decodeLoginNeedEmailConfirmation =
+    decodeConstant "NEED EMAIL CONFIRMATION" LoginNeedEmailConfirmation
+
+
+decodeLoginTooManyRequests =
+    decodeConstant "TOO MANY REQUESTS" LoginTooManyRequests
 
 
 decodeUserProfile : Decode.Decoder UserProfile
@@ -956,27 +970,26 @@ decodeUserProfile =
     Decode.succeed UserProfile
         |> Pipeline.required "username" Decode.string
         |> Pipeline.required "email" Decode.string
-        |> Pipeline.required "role" decodeRole
+        |> Pipeline.required "roles" decodeRole
 
 
 decodeRole : Decode.Decoder Role
 decodeRole =
-    Decode.string
-        |> Decode.andThen
-            (\s ->
-                case s of
-                    "ADMIN" ->
-                        Decode.succeed Admin
-
-                    "USER" ->
-                        Decode.succeed User
-
-                    otherwise ->
-                        Decode.fail (otherwise ++ " is not a valid role")
-            )
+    Decode.succeed Admin
 
 
 
+--Decode.string
+--    |> Decode.andThen
+--        (\s ->
+--            case s of
+--                "ADMIN" ->
+--                    Decode.succeed Admin
+--                "USER" ->
+--                    Decode.succeed User
+--                otherwise ->
+--                    Decode.fail (otherwise ++ " is not a valid role")
+--        )
 -- # ** Login ** # --
 -- # *********** # --
 -- # *********************** # --
@@ -984,48 +997,26 @@ decodeRole =
 
 
 validateThenVerifyCode : State t CodeVerificationModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
-validateThenVerifyCode (State data) =
+validateThenVerifyCode (State model) =
     case
-        validateErrorDict
-            (Validate.all
-                [ ifFalse
-                    (\m ->
-                        case String.toInt m.code of
-                            Just n ->
-                                n >= 0 && n <= 999999
-
-                            Nothing ->
-                                False
-                    )
-                    ( "confirmationCode", "The code is invalid" )
-                , ifTrue
-                    (\m ->
-                        m.requestStatus
-                            == Waiting
-                            || m.requestStatus
-                            == Success
-                    )
-                    ( "admin", "Can't verify code now" )
-                ]
-            )
-            data
+        validateCodeVerification model
     of
         Ok validData ->
-            ( State { data | requestStatus = Waiting }
+            ( State { model | requestStatus = Waiting }
                 |> CodeVerification
             , verifyCode validData
             , Nothing
             )
 
         Err errors ->
-            ( State { data | showValidationErrors = True, validationErrors = errors }
+            ( State { model | showValidationErrors = True }
                 |> CodeVerification
             , Cmd.none
             , Nothing
             )
 
 
-verifyCode : Valid { a | code : String, verificationEndpoint : String } -> Cmd Msg
+verifyCode : Valid { a | code : String, verificationEndpoint : String, email : String } -> Cmd Msg
 verifyCode validData =
     let
         model =
@@ -1033,12 +1024,13 @@ verifyCode validData =
 
         body =
             Encode.object
-                [ ( "confirmationCode"
+                [ ( "code"
                   , Encode.int
                         (String.toInt model.code
                             |> Maybe.withDefault 0
                         )
                   )
+                , ( "email", Encode.string model.email )
                 ]
                 |> Http.jsonBody
     in
@@ -1058,13 +1050,13 @@ type CodeVerificationResult
 decodeCodeVerificationResult : Decode.Decoder CodeVerificationResult
 decodeCodeVerificationResult =
     Decode.oneOf
-        [ Decode.field "message" decodeCodeVerificationSuccess
+        [ Decode.field "message" decodeCodeVerificationWithPayloadSuccess
         , Decode.field "serverError" decodeCodeVerificationFailure
         , Decode.field "serverError" decodeCodeVerificationTooManyAttempts
         ]
 
 
-decodeCodeVerificationSuccess =
+decodeCodeVerificationWithPayloadSuccess =
     Decode.field "codeVerificationPayload" Decode.value
         |> Decode.map CodeVerificationSuccess
 
@@ -1084,31 +1076,18 @@ decodeCodeVerificationTooManyAttempts =
 -- # ** Signup ** # --
 
 
-validateSignup =
-    validateErrorDict
-        (Validate.all
-            [ validateUsername
-            , validatePassword
-            , validateConfirmPasword
-            , ifFalse (\m -> m.password == m.confirmPassword)
-                ( "confirmPassword", "Passwords are not matching" )
-            , validateEmail
-            ]
-        )
-
-
 validateThenSignup : State t SignupModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
 validateThenSignup (State data) =
     case validateSignup data of
         Ok validData ->
             ( State { data | requestStatus = Waiting }
                 |> Signup
-            , Cmd.none
+            , signup validData
             , Nothing
             )
 
         Err errors ->
-            ( State { data | showValidationErrors = True, validationErrors = errors }
+            ( State { data | showValidationErrors = True }
                 |> Signup
             , Cmd.none
             , Nothing
@@ -1141,6 +1120,7 @@ type SignupResult
     | SignupInvalidEmail
     | SignupUserAlreadyExists
     | SignupTooManyRequests
+    | SignupInvalidPassword
 
 
 decodeSignupResult =
@@ -1149,6 +1129,7 @@ decodeSignupResult =
         , Decode.field "serverError" decodeSignupInvalidEmail
         , Decode.field "serverError" decodeSignupUserAlreadyExists
         , Decode.field "serverError" decodeSignupTooManyRequests
+        , Decode.field "serverError" decodeSignupInvalidPassword
         ]
 
 
@@ -1166,6 +1147,10 @@ decodeSignupUserAlreadyExists =
 
 decodeSignupTooManyRequests =
     decodeConstant "TOO MANY REQUESTS" SignupTooManyRequests
+
+
+decodeSignupInvalidPassword =
+    decodeConstant "INVALID PASSWORD" SignupInvalidPassword
 
 
 
@@ -1199,6 +1184,80 @@ decodeConstant c v =
 
 
 
+-- # **************** # --
+-- # ** Validators ** # --
+
+
+validateUsername =
+    ifBlank .username ( "username", "Please enter a username." )
+
+
+validatePassword =
+    ifBlank .password ( "password", "Please enter a password" )
+
+
+validateConfirmPasword =
+    ifBlank .confirmPassword ( "confirmPassword", "Please confirm your password" )
+
+
+validateEmail =
+    Validate.all
+        [ ifBlank .email ( "email", "Please enter an email" )
+        , ifInvalidEmail .email (\e -> ( "email", "Invalid email: " ++ e ))
+        ]
+
+
+validateLogin =
+    validateErrorDict
+        (Validate.all
+            [ validateUsername
+            , validatePassword
+            ]
+        )
+
+
+validateCodeVerification =
+    validateErrorDict
+        (Validate.all
+            [ ifFalse
+                (\m ->
+                    case String.toInt m.code of
+                        Just n ->
+                            n >= 0 && n <= 999999
+
+                        Nothing ->
+                            False
+                )
+                ( "code", "The code is invalid" )
+            , ifTrue
+                (\m ->
+                    m.requestStatus
+                        == Waiting
+                        || m.requestStatus
+                        == Success
+                )
+                ( "admin", "Can't verify code now" )
+            , validateEmail
+            ]
+        )
+
+
+validateSignup =
+    validateErrorDict
+        (Validate.all
+            [ validateUsername
+            , validatePassword
+            , validateConfirmPasword
+            , ifFalse (\m -> m.password == m.confirmPassword)
+                ( "confirmPassword", "Passwords are not matching" )
+            , validateEmail
+            ]
+        )
+
+
+
+-- # ** Validators ** # --
+-- # **************** # --
 --# ***** Http requests and validation ***** #--
 --# **************************************** #--
 -------------------------------------------------------------------------------
@@ -1239,26 +1298,29 @@ view config auth =
 loginView : ViewConfig msg -> LoginModel -> Element Msg
 loginView config model =
     let
+        model_ =
+            validateModelIfShowError validateLogin model
+
         status =
-            model.requestStatus
+            model_.requestStatus
 
         initialView =
             column
                 [ spacing 15 ]
                 [ customInput
                     { label = "Username: "
-                    , value = model.username
+                    , value = model_.username
                     , tag = "username"
                     , handler = SetUsername
                     }
-                    model
+                    model_
                 , customCurrentPasswordInput
                     { label = "Password: "
-                    , value = model.password
+                    , value = model_.password
                     , tag = "password"
                     , handler = SetPassword
                     }
-                    model
+                    model_
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress = Just LoginRequest
@@ -1289,7 +1351,7 @@ loginView config model =
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress =
-                            Just <| ToLogin { model | requestStatus = Initial } False
+                            Just <| ToLogin { model_ | requestStatus = Initial } False
                         , label = text "Réessayer"
                         }
                     ]
@@ -1325,22 +1387,33 @@ passwordResetView config model =
 codeVerificationView : ViewConfig msg -> CodeVerificationModel -> Element Msg
 codeVerificationView config model =
     let
+        model_ =
+            validateModelIfShowError validateCodeVerification model
+
         status =
-            model.requestStatus
+            model_.requestStatus
 
         initialView =
             column
                 [ spacing 15 ]
-                [ Input.text textInputStyle
-                    { onChange =
-                        SetVerificationCode
-                    , text =
-                        model.code
-                    , placeholder = Nothing
-                    , label =
-                        Input.labelAbove [ centerY ]
-                            (el [ width (px 110) ] (text "Input verification code: "))
+                [ customInput
+                    { label = "Input verification code: "
+                    , value = model_.code
+                    , tag = "code"
+                    , handler = SetVerificationCode
                     }
+                    model_
+                , if model.askForEmail then
+                    customEmailInput
+                        { label = "Email:"
+                        , value = model_.email
+                        , tag = "email"
+                        , handler = SetEmail
+                        }
+                        model_
+
+                  else
+                    Element.none
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress = Just CodeVerificationRequest
@@ -1367,7 +1440,7 @@ codeVerificationView config model =
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress =
-                            Just <| ToCodeVerification model
+                            Just <| ToCodeVerification model_
                         , label = text "Try again"
                         }
                     ]
@@ -1379,7 +1452,7 @@ codeVerificationView config model =
         , Font.size 16
         , alignTop
         ]
-        [ text model.verificationNotice
+        [ text model_.verificationNotice
         , case status of
             Initial ->
                 initialView
@@ -1409,12 +1482,7 @@ signupView : ViewConfig msg -> SignupModel -> Element Msg
 signupView config model =
     let
         model_ =
-            case ( model.showValidationErrors, validateSignup model ) of
-                ( True, Err validationErrors ) ->
-                    { model | validationErrors = validationErrors }
-
-                _ ->
-                    model
+            validateModelIfShowError validateSignup model
 
         status =
             model_.requestStatus
@@ -1429,7 +1497,7 @@ signupView config model =
                     , handler = SetUsername
                     }
                     model_
-                , customInput
+                , customEmailInput
                     { label = "Email: "
                     , value = model_.email
                     , tag = "email"
@@ -1480,7 +1548,7 @@ signupView config model =
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress =
-                            Just <| ToSignup initSignupModel
+                            Just <| ToSignup { model_ | requestStatus = Initial }
                         , label = text "Réessayer"
                         }
                     , Input.button (buttonStyle True)
@@ -1653,6 +1721,22 @@ customEmailInput config model =
             }
         , errorView config model
         ]
+
+
+
+--validateModelIfShowError : Validator b c -> { a | showValidationErrors : Bool, validationErrors : ValidationErrors } -> { a | showValidationErrors : Bool, validationErrors : ValidationErrors }
+
+
+validateModelIfShowError validator model =
+    case ( model.showValidationErrors, validator model ) of
+        ( True, Err validationErrors ) ->
+            { model | validationErrors = validationErrors }
+
+        ( True, Ok _ ) ->
+            { model | validationErrors = Dict.empty }
+
+        _ ->
+            model
 
 
 errorView :
