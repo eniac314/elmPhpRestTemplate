@@ -11,6 +11,8 @@ module Auth.Auth exposing
     , view
     )
 
+import Auth.Common exposing (..)
+import Auth.Internal.Signup as Signup
 import Dict exposing (..)
 import Dict.Extra exposing (fromListDedupe)
 import Element exposing (..)
@@ -119,6 +121,7 @@ type alias CodeVerificationModel =
     , email : String
     , askForEmail : Bool
     , requestStatus : Status
+    , resendRequestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
     , onVerified : Decode.Value -> Msg
@@ -148,26 +151,29 @@ type alias AdminControlPanelModel =
 
 
 type alias SignupModel =
-    { username : String
-    , email : String
-    , password : String
-    , confirmPassword : String
-    , requestStatus : Status
-    , showValidationErrors : Bool
-    , validationErrors : ValidationErrors
-    }
+    Signup.SignupModel
+
+
+
+--{ username : String
+--, email : String
+--, password : String
+--, confirmPassword : String
+--, requestStatus : Status
+--, showValidationErrors : Bool
+--, validationErrors : ValidationErrors
+--}
 
 
 type alias LogoutModel =
     { requestStatus : Status }
 
 
-type alias FieldId =
-    String
 
-
-type alias ValidationErrors =
-    Dict FieldId (List String)
+--type alias FieldId =
+--    String
+--type alias ValidationErrors =
+--    Dict FieldId (List String)
 
 
 compileErrors : List ( FieldId, String ) -> ValidationErrors
@@ -243,6 +249,8 @@ type Msg
     | ToSignup SignupModel
     | ToLogout LogoutModel
     | ToPasswordReset PasswordResetModel
+    | ResendConfirmationRequest
+    | ResendConfirmationRequestResult (Result Http.Error ResendConfirmationResult)
     | NoOp
 
 
@@ -454,6 +462,16 @@ update config msg auth =
             ( toSignup state signupModel
             , Cmd.none
             , Nothing
+            )
+
+        ( Signup state, ToLogin loginModel autoLogin ) ->
+            let
+                ( newAuth, cmd, result ) =
+                    toLogin state loginModel autoLogin
+            in
+            ( newAuth
+            , Cmd.map config.outMsg cmd
+            , result
             )
 
         ( Signup state, SignupRequest ) ->
@@ -798,6 +816,7 @@ initCodeVerificationModel =
     , email = ""
     , askForEmail = False
     , requestStatus = Initial
+    , resendRequestStatus = Initial
     , verificationNotice = ""
     , verificationEndpoint = ""
     , onVerified = always NoOp
@@ -839,16 +858,17 @@ toPasswordReset state passwordResetModel =
         |> PasswordReset
 
 
-initSignupModel : SignupModel
-initSignupModel =
-    { username = ""
-    , email = ""
-    , password = ""
-    , confirmPassword = ""
-    , requestStatus = Initial
-    , showValidationErrors = False
-    , validationErrors = Dict.empty
-    }
+
+--initSignupModel : SignupModel
+--initSignupModel =
+--    { username = ""
+--    , email = ""
+--    , password = ""
+--    , confirmPassword = ""
+--    , requestStatus = Initial
+--    , showValidationErrors = False
+--    , validationErrors = Dict.empty
+--    }
 
 
 toSignup :
@@ -996,6 +1016,26 @@ decodeRole =
 -- # ** Code verification ** # --
 
 
+validateThenResendConfirmation : State t CodeVerificationModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
+validateThenResendConfirmation (State model) =
+    case
+        validateErrorDict validateEmail model
+    of
+        Ok validData ->
+            ( State { model | resendRequestStatus = Waiting }
+                |> CodeVerification
+            , resendConfirmation validData
+            , Nothing
+            )
+
+        Err errors ->
+            ( State { model | showValidationErrors = True }
+                |> CodeVerification
+            , Cmd.none
+            , Nothing
+            )
+
+
 validateThenVerifyCode : State t CodeVerificationModel -> ( Auth, Cmd Msg, Maybe (PluginResult LogInfo) )
 validateThenVerifyCode (State model) =
     case
@@ -1067,6 +1107,40 @@ decodeCodeVerificationFailure =
 
 decodeCodeVerificationTooManyAttempts =
     decodeConstant "CODE VERIFICATION TOO MANY ATTEMPTS" CodeVerificationTooManyAttempts
+
+
+resendConfirmation : Valid { a | email : String } -> Cmd Msg
+resendConfirmation validData =
+    let
+        model =
+            fromValid validData
+
+        body =
+            Encode.object
+                [ ( "email", Encode.string model.email )
+                ]
+                |> Http.jsonBody
+    in
+    Http.post
+        { url = "api/resendConfirmation"
+        , body = body
+        , expect = Http.expectJson ResendConfirmationRequestResult decodeResendConfirmationResult
+        }
+
+
+type ResendConfirmationResult
+    = ResendConfirmationSuccess
+    | ResendConfirmationFailure
+
+
+decodeResendConfirmationResult =
+    Decode.oneOf
+        [ Decode.field "message" decodeResendConfirmationSuccess
+        ]
+
+
+decodeResendConfirmationSuccess =
+    decodeConstant "RESEND CODE CONFIRMATION SUCCESS" ResendConfirmationSuccess
 
 
 
@@ -1327,7 +1401,7 @@ loginView config model =
                         , label = text "Log in"
                         }
                     , Input.button (buttonStyle True)
-                        { onPress = Just <| ToSignup initSignupModel
+                        { onPress = Just <| ToSignup Signup.initSignupModel
                         , label = text "New user signup"
                         }
                     ]
@@ -1442,6 +1516,11 @@ codeVerificationView config model =
                         { onPress =
                             Just <| ToCodeVerification model_
                         , label = text "Try again"
+                        }
+                    , Input.button (buttonStyle True)
+                        { onPress =
+                            Nothing
+                        , label = text "Back"
                         }
                     ]
                 ]
