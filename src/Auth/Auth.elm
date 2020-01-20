@@ -405,13 +405,13 @@ update config msg auth =
         ( PasswordReset (State model), UpdatePasswordRequestResult res ) ->
             case res of
                 Ok UpdatePasswordSuccess ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Success }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Success }
                     , Cmd.none
                     , Nothing
                     )
 
                 Ok UpdatePasswordInvalidSelectorTokenPair ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: invalid selector token pair "
                         , details = Nothing
@@ -422,7 +422,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordTokenExpired ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: token expired"
                         , details = Nothing
@@ -433,7 +433,7 @@ update config msg auth =
                     )
 
                 Ok UpdateInitiatePasswordResetDisabled ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: password reset disabled"
                         , details = Nothing
@@ -444,7 +444,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordInvalidPassword ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: invalid password"
                         , details = Nothing
@@ -455,7 +455,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordTooManyRequests ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: too many requests"
                         , details = Nothing

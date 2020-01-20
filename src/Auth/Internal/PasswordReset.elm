@@ -227,7 +227,13 @@ passwordResetView handlers model =
             Element.none
 
         InitiatingPasswordResetRequest Failure ->
-            Element.none
+            column
+                [ spacing 15 ]
+                [ Input.button (buttonStyle True)
+                    { onPress = Just <| handlers.toLogin
+                    , label = text "Back"
+                    }
+                ]
 
         UpdatingPasswordRequest Initial ->
             let
@@ -284,7 +290,13 @@ passwordResetView handlers model =
                 ]
 
         UpdatingPasswordRequest Failure ->
-            Element.none
+            column
+                [ spacing 15 ]
+                [ Input.button (buttonStyle True)
+                    { onPress = Just <| handlers.toLogin
+                    , label = text "Back"
+                    }
+                ]
 
 
 waitingView =
