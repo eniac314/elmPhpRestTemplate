@@ -20,12 +20,44 @@ import Validate exposing (..)
 
 
 type alias LogoutModel =
-    { requestStatus : Status }
+    { requestStatus : Status
+    , autoLogout : Bool
+    }
 
 
 initLogoutModel : LogoutModel
 initLogoutModel =
-    { requestStatus = Initial }
+    { requestStatus = Initial
+    , autoLogout = False
+    }
+
+
+logout : (Result Http.Error LogoutResult -> msg) -> Cmd msg
+logout handler =
+    Http.get
+        { url = "/api/logout"
+        , expect = Http.expectJson handler decodeLogoutMessage
+        }
+
+
+type LogoutResult
+    = LogoutSuccess
+    | LogoutNotLoggedIn
+
+
+decodeLogoutMessage =
+    Decode.oneOf
+        [ Decode.field "message" decodeLogoutSuccess
+        , Decode.field "serverError" decodeNotLoggedIn
+        ]
+
+
+decodeLogoutSuccess =
+    decodeConstant "LOGOUT SUCCESS" LogoutSuccess
+
+
+decodeNotLoggedIn =
+    decodeConstant "NOT LOGGED IN" LogoutNotLoggedIn
 
 
 type alias Handlers msg =

@@ -76,6 +76,7 @@ type LoginResult
     | LoginWrongCredentials
     | LoginNeedEmailConfirmation
     | LoginTooManyRequests
+    | LoginUnknownUsername
 
 
 decodeLoginResult : Decode.Decoder LoginResult
@@ -83,10 +84,15 @@ decodeLoginResult =
     Decode.oneOf
         [ Decode.field "message" decodeUserProfile
             |> Decode.map LoginSuccess
+        , Decode.field "serverError" decodeUnknownUsername
         , Decode.field "serverError" decodeLoginWrongCredentials
         , Decode.field "serverError" decodeLoginNeedEmailConfirmation
         , Decode.field "serverError" decodeLoginTooManyRequests
         ]
+
+
+decodeUnknownUsername =
+    decodeConstant "UNKNOWN USERNAME" LoginUnknownUsername
 
 
 decodeLoginWrongCredentials =
@@ -94,7 +100,7 @@ decodeLoginWrongCredentials =
 
 
 decodeLoginNeedEmailConfirmation =
-    decodeConstant "NEED EMAIL CONFIRMATION" LoginNeedEmailConfirmation
+    decodeConstant "NEED EMAIL VERIFICATION" LoginNeedEmailConfirmation
 
 
 decodeLoginTooManyRequests =
@@ -120,6 +126,7 @@ type alias Handlers msg =
     , loginRequest : msg
     , toLogin : msg
     , toSignup : msg
+    , toPasswordReset : msg
     }
 
 
@@ -155,8 +162,12 @@ loginView handlers model =
                         , label = text "Log in"
                         }
                     , Input.button (buttonStyle True)
-                        { onPress = Just <| handlers.toSignup --ToSignup Signup.initSignupModel
+                        { onPress = Just <| handlers.toSignup
                         , label = text "New user signup"
+                        }
+                    , Input.button (buttonStyle True)
+                        { onPress = Just <| handlers.toPasswordReset
+                        , label = text "Forgot password"
                         }
                     ]
                 ]

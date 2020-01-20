@@ -16,15 +16,25 @@ function print_json_error($msg){
     echo (json_encode($result));
 }
 
-function get_json_post_data(){
+function get_json_post_data($expected = array()){
     $json_data = file_get_contents("php://input");
-    $php_data = json_decode($json_data);
-
-    if (is_null($php_data)){
+    $post_data = json_decode($json_data, true);
+    
+    if (is_null($post_data)){
         trigger_error("json data could not be decoded");
-        logError("json data could not be decoded");
+        print_json_error("json data could not be decoded");
         exit();
     }
 
-    return $php_data;   
+    if (!empty($expected)){
+        foreach ($expected as $var) {
+            if (!isset($post_data[$var])){
+                trigger_error("$var has not been set");
+                print_json_error("$var has not been set");
+                exit();
+            }
+        }
+    }
+
+    return $post_data;   
 }

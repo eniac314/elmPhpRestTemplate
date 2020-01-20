@@ -40,10 +40,18 @@ initAdminControlPanelModel userProfile =
     }
 
 
-type alias Handlers =
-    {}
+type alias Handlers msg =
+    { toLogout : msg }
 
 
-adminControlView : Handlers -> AdminControlPanelModel -> Element msg
+adminControlView : Handlers msg -> AdminControlPanelModel -> Element msg
 adminControlView handlers model =
-    Element.none
+    column
+        [ spacing 15 ]
+        [ text <| "Hello " ++ model.userProfile.username
+        , Input.button (buttonStyle True)
+            { onPress =
+                Just <| handlers.toLogout
+            , label = text "Logout"
+            }
+        ]

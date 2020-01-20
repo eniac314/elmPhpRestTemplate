@@ -23,6 +23,7 @@ if ($local){
 	define('BASE_URL', 'http://localhost/public/');
 	define('DB','/var/www/html/includes/localDB.inc.php');
 	define('LOGFILE', '/var/www/html/errors.log');
+	define('LOGFILE_SHORT', '/var/www/html/errors_short.log');
 
 } else {
 	define('PROJECT_NAME', '');
@@ -30,6 +31,7 @@ if ($local){
 	define('BASE_URL', '');
 	define('DB',BASE_URI.PROJECT_NAME.'/includes/prodDB.inc.php');
 	define('LOGFILE', BASE_URI.PROJECT_NAME.'/errors.log');
+	define('LOGFILE_SHORT',BASE_URI.PROJECT_NAME.'/errors_short.log');
 }
 
 # *****SETTINGS***** #
@@ -62,6 +64,8 @@ function custom_error_handler($e_number, $e_message, $e_file, $e_line, $e_vars){
 
 	$log =  "# ******** ".date("D M d, Y G:i", time())."*************************************************** #\r\n";
 	$log .= "An error occurred in script '$e_file' on line $e_line: $e_message\r\n";
+	
+	$short_log = $log;
 	$log .= print_r($e_vars, 1);
 	$log .= print_r(debug_backtrace(), 1);
 	$log .= "\r\n\r\n\r\n";
@@ -70,6 +74,7 @@ function custom_error_handler($e_number, $e_message, $e_file, $e_line, $e_vars){
 		error_log($email, 1, $contact_email, $headers);
 	} 
 	error_log($log, 3, LOGFILE);
+	error_log($short_log, 3, LOGFILE_SHORT);
 
 }
 

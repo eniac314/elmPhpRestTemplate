@@ -174,7 +174,7 @@ signupView handlers model =
                         , label = text "Send"
                         }
                     , Input.button (buttonStyle True)
-                        { onPress = Just <| handlers.toLogin --ToLogin initLoginModel False
+                        { onPress = Just <| handlers.toLogin
                         , label = text "Back"
                         }
                     ]

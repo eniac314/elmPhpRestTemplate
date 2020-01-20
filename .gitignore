@@ -2,6 +2,7 @@
 /elm-stuff
 /apacheBackup/includes/prodDB.inc.php
 /apacheBackup/errors.log
+/apacheBackup/errors_short.log
 /apacheBackup/vendor
 /html
 composer.phar

@@ -23,12 +23,26 @@ type alias CodeVerificationModel =
     , email : String
     , askForEmail : Bool
     , requestStatus : Status
-    , resendRequestStatus : Status
+    , newCodeRequestStatus : Status
     , verificationNotice : String
     , verificationEndpoint : String
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
+    , internalStatus : InternalStatus
     }
+
+
+type InternalStatus
+    = CodeVerification
+    | RequestNewCode
+
+
+toogleInternalStatus model =
+    if model.internalStatus == CodeVerification then
+        { model | internalStatus = RequestNewCode }
+
+    else
+        { model | internalStatus = CodeVerification }
 
 
 initCodeVerificationModel : CodeVerificationModel
@@ -37,11 +51,12 @@ initCodeVerificationModel =
     , email = ""
     , askForEmail = False
     , requestStatus = Initial
-    , resendRequestStatus = Initial
+    , newCodeRequestStatus = Initial
     , verificationNotice = ""
     , verificationEndpoint = ""
     , showValidationErrors = False
     , validationErrors = Dict.empty
+    , internalStatus = CodeVerification
     }
 
 
@@ -127,11 +142,11 @@ decodeCodeVerificationTooManyAttempts =
     decodeConstant "CODE VERIFICATION TOO MANY ATTEMPTS" CodeVerificationTooManyAttempts
 
 
-resendConfirmation :
+newCode :
     Valid { a | email : String }
-    -> (Result Http.Error ResendConfirmationResult -> msg)
+    -> (Result Http.Error NewCodeResult -> msg)
     -> Cmd msg
-resendConfirmation validData handler =
+newCode validData handler =
     let
         model =
             fromValid validData
@@ -143,32 +158,45 @@ resendConfirmation validData handler =
                 |> Http.jsonBody
     in
     Http.post
-        { url = "api/resendConfirmation"
+        { url = "api/newCode"
         , body = body
-        , expect = Http.expectJson handler decodeResendConfirmationResult
+        , expect = Http.expectJson handler decodeNewCodeResult
         }
 
 
-type ResendConfirmationResult
-    = ResendConfirmationSuccess
-    | ResendConfirmationFailure
+type NewCodeResult
+    = NewCodeSuccess
+    | NewCodeTooManyAttemps
+    | NewCodeNoPreviousAttempt
 
 
-decodeResendConfirmationResult =
+decodeNewCodeResult =
     Decode.oneOf
-        [ Decode.field "message" decodeResendConfirmationSuccess
+        [ Decode.field "message" decodeNewCodeSuccess
+        , Decode.field "serverError" decodeNewCodeTooManyAttemps
+        , Decode.field "serverError" decodeNewCodeNoPreviousAttempt
         ]
 
 
-decodeResendConfirmationSuccess =
-    decodeConstant "RESEND CODE CONFIRMATION SUCCESS" ResendConfirmationSuccess
+decodeNewCodeSuccess =
+    decodeConstant "RESEND CODE VERIFICATION SUCCESS" NewCodeSuccess
+
+
+decodeNewCodeTooManyAttemps =
+    decodeConstant "RESEND CODE TOO MANY ATTEMPS" NewCodeTooManyAttemps
+
+
+decodeNewCodeNoPreviousAttempt =
+    decodeConstant "RESEND CODE NO PREVIOUS ATTEMPT" NewCodeNoPreviousAttempt
 
 
 type alias Handlers msg =
     { setVerificationCode : String -> msg
     , setEmail : String -> msg
     , codeVerificationRequest : msg
-    , toCodeVerification : msg
+    , toogleInternalStatus : msg
+    , newCodeRequest : msg
+    , toCodeVerification : CodeVerificationModel -> msg
     }
 
 
@@ -205,9 +233,12 @@ codeVerificationView handlers model =
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress = Just handlers.codeVerificationRequest
-                        , label = text "Send"
+                        , label = text "Confirm code"
                         }
                     ]
+                , el
+                    [ Events.onClick handlers.toogleInternalStatus ]
+                    (text "I did not get a code")
                 ]
 
         waitingView =
@@ -228,12 +259,37 @@ codeVerificationView handlers model =
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress =
-                            Just <| handlers.toCodeVerification
+                            Just <| handlers.toCodeVerification { model_ | requestStatus = Initial }
                         , label = text "Try again"
                         }
                     , Input.button (buttonStyle True)
                         { onPress =
                             Nothing
+                        , label = text "Back"
+                        }
+                    ]
+                ]
+
+        requestNewCodeView =
+            column
+                [ spacing 15 ]
+                [ customEmailInput
+                    { label = "Email:"
+                    , value = model_.email
+                    , tag = "email"
+                    , handler = handlers.setEmail
+                    }
+                    model_
+                , row
+                    [ spacing 15 ]
+                    [ Input.button
+                        (buttonStyle (model_.newCodeRequestStatus == Initial))
+                        { onPress = Just handlers.newCodeRequest
+                        , label = text "Get a new code"
+                        }
+                    , Input.button
+                        (buttonStyle True)
+                        { onPress = Just handlers.toogleInternalStatus
                         , label = text "Back"
                         }
                     ]
@@ -246,16 +302,21 @@ codeVerificationView handlers model =
         , alignTop
         ]
         [ text model_.verificationNotice
-        , case status of
-            Initial ->
-                initialView
+        , case model.internalStatus of
+            CodeVerification ->
+                case status of
+                    Initial ->
+                        initialView
 
-            Waiting ->
-                waitingView
+                    Waiting ->
+                        waitingView
 
-            Success ->
-                successView
+                    Success ->
+                        successView
 
-            Failure ->
-                failureView
+                    Failure ->
+                        failureView
+
+            RequestNewCode ->
+                requestNewCodeView
         ]

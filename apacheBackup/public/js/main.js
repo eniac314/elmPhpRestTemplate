@@ -4941,6 +4941,69 @@ function _Browser_load(url)
 
 
 
+function _Time_now(millisToPosix)
+{
+	return _Scheduler_binding(function(callback)
+	{
+		callback(_Scheduler_succeed(millisToPosix(Date.now())));
+	});
+}
+
+var _Time_setInterval = F2(function(interval, task)
+{
+	return _Scheduler_binding(function(callback)
+	{
+		var id = setInterval(function() { _Scheduler_rawSpawn(task); }, interval);
+		return function() { clearInterval(id); };
+	});
+});
+
+function _Time_here()
+{
+	return _Scheduler_binding(function(callback)
+	{
+		callback(_Scheduler_succeed(
+			A2($elm$time$Time$customZone, -(new Date().getTimezoneOffset()), _List_Nil)
+		));
+	});
+}
+
+
+function _Time_getZoneName()
+{
+	return _Scheduler_binding(function(callback)
+	{
+		try
+		{
+			var name = $elm$time$Time$Name(Intl.DateTimeFormat().resolvedOptions().timeZone);
+		}
+		catch (e)
+		{
+			var name = $elm$time$Time$Offset(new Date().getTimezoneOffset());
+		}
+		callback(_Scheduler_succeed(name));
+	});
+}
+
+
+function _Url_percentEncode(string)
+{
+	return encodeURIComponent(string);
+}
+
+function _Url_percentDecode(string)
+{
+	try
+	{
+		return $elm$core$Maybe$Just(decodeURIComponent(string));
+	}
+	catch (e)
+	{
+		return $elm$core$Maybe$Nothing;
+	}
+}
+
+
 // SEND REQUEST
 
 var _Http_toTask = F3(function(router, toTask, request)
@@ -5115,68 +5178,106 @@ function _Http_track(router, xhr, tracker)
 	});
 }
 
+// CREATE
 
-function _Time_now(millisToPosix)
+var _Regex_never = /.^/;
+
+var _Regex_fromStringWith = F2(function(options, string)
 {
-	return _Scheduler_binding(function(callback)
-	{
-		callback(_Scheduler_succeed(millisToPosix(Date.now())));
-	});
-}
+	var flags = 'g';
+	if (options.multiline) { flags += 'm'; }
+	if (options.caseInsensitive) { flags += 'i'; }
 
-var _Time_setInterval = F2(function(interval, task)
-{
-	return _Scheduler_binding(function(callback)
-	{
-		var id = setInterval(function() { _Scheduler_rawSpawn(task); }, interval);
-		return function() { clearInterval(id); };
-	});
-});
-
-function _Time_here()
-{
-	return _Scheduler_binding(function(callback)
-	{
-		callback(_Scheduler_succeed(
-			A2($elm$time$Time$customZone, -(new Date().getTimezoneOffset()), _List_Nil)
-		));
-	});
-}
-
-
-function _Time_getZoneName()
-{
-	return _Scheduler_binding(function(callback)
-	{
-		try
-		{
-			var name = $elm$time$Time$Name(Intl.DateTimeFormat().resolvedOptions().timeZone);
-		}
-		catch (e)
-		{
-			var name = $elm$time$Time$Offset(new Date().getTimezoneOffset());
-		}
-		callback(_Scheduler_succeed(name));
-	});
-}
-
-
-function _Url_percentEncode(string)
-{
-	return encodeURIComponent(string);
-}
-
-function _Url_percentDecode(string)
-{
 	try
 	{
-		return $elm$core$Maybe$Just(decodeURIComponent(string));
+		return $elm$core$Maybe$Just(new RegExp(string, flags));
 	}
-	catch (e)
+	catch(error)
 	{
 		return $elm$core$Maybe$Nothing;
 	}
-}var $author$project$Main$ChangeUrl = function (a) {
+});
+
+
+// USE
+
+var _Regex_contains = F2(function(re, string)
+{
+	return string.match(re) !== null;
+});
+
+
+var _Regex_findAtMost = F3(function(n, re, str)
+{
+	var out = [];
+	var number = 0;
+	var string = str;
+	var lastIndex = re.lastIndex;
+	var prevLastIndex = -1;
+	var result;
+	while (number++ < n && (result = re.exec(string)))
+	{
+		if (prevLastIndex == re.lastIndex) break;
+		var i = result.length - 1;
+		var subs = new Array(i);
+		while (i > 0)
+		{
+			var submatch = result[i];
+			subs[--i] = submatch
+				? $elm$core$Maybe$Just(submatch)
+				: $elm$core$Maybe$Nothing;
+		}
+		out.push(A4($elm$regex$Regex$Match, result[0], result.index, number, _List_fromArray(subs)));
+		prevLastIndex = re.lastIndex;
+	}
+	re.lastIndex = lastIndex;
+	return _List_fromArray(out);
+});
+
+
+var _Regex_replaceAtMost = F4(function(n, re, replacer, string)
+{
+	var count = 0;
+	function jsReplacer(match)
+	{
+		if (count++ >= n)
+		{
+			return match;
+		}
+		var i = arguments.length - 3;
+		var submatches = new Array(i);
+		while (i > 0)
+		{
+			var submatch = arguments[i];
+			submatches[--i] = submatch
+				? $elm$core$Maybe$Just(submatch)
+				: $elm$core$Maybe$Nothing;
+		}
+		return replacer(A4($elm$regex$Regex$Match, match, arguments[arguments.length - 2], count, _List_fromArray(submatches)));
+	}
+	return string.replace(re, jsReplacer);
+});
+
+var _Regex_splitAtMost = F3(function(n, re, str)
+{
+	var string = str;
+	var out = [];
+	var start = re.lastIndex;
+	var restoreLastIndex = re.lastIndex;
+	while (n--)
+	{
+		var result = re.exec(string);
+		if (!result) break;
+		out.push(string.slice(start, result.index));
+		start = re.lastIndex;
+	}
+	out.push(string.slice(start));
+	re.lastIndex = restoreLastIndex;
+	return _List_fromArray(out);
+});
+
+var _Regex_infinity = Infinity;
+var $author$project$Main$ChangeUrl = function (a) {
 	return {$: 'ChangeUrl', a: a};
 };
 var $author$project$Main$ClickedLink = function (a) {
@@ -10781,29 +10882,7 @@ var $elm$core$Basics$never = function (_v0) {
 	}
 };
 var $elm$browser$Browser$application = _Browser_application;
-var $author$project$Main$AuthMsg = function (a) {
-	return {$: 'AuthMsg', a: a};
-};
 var $elm$browser$Browser$Events$Visible = {$: 'Visible'};
-var $elm$url$Url$Builder$toQueryPair = function (_v0) {
-	var key = _v0.a;
-	var value = _v0.b;
-	return key + ('=' + value);
-};
-var $elm$url$Url$Builder$toQuery = function (parameters) {
-	if (!parameters.b) {
-		return '';
-	} else {
-		return '?' + A2(
-			$elm$core$String$join,
-			'&',
-			A2($elm$core$List$map, $elm$url$Url$Builder$toQueryPair, parameters));
-	}
-};
-var $elm$url$Url$Builder$absolute = F2(
-	function (pathSegments, parameters) {
-		return '/' + (A2($elm$core$String$join, '/', pathSegments) + $elm$url$Url$Builder$toQuery(parameters));
-	});
 var $mdgriffith$elm_ui$Element$BigDesktop = {$: 'BigDesktop'};
 var $mdgriffith$elm_ui$Element$Desktop = {$: 'Desktop'};
 var $mdgriffith$elm_ui$Element$Landscape = {$: 'Landscape'};
@@ -10824,293 +10903,25 @@ var $mdgriffith$elm_ui$Element$classifyDevice = function (window) {
 		orientation: (_Utils_cmp(window.width, window.height) < 0) ? $mdgriffith$elm_ui$Element$Portrait : $mdgriffith$elm_ui$Element$Landscape
 	};
 };
-var $author$project$Main$docRoot = _List_fromArray(
-	['tmp', 'tmp2', 'public']);
-var $author$project$Auth$AuthPlugin$LoggedOut = {$: 'LoggedOut'};
-var $author$project$Auth$AuthPlugin$LoginMode = function (a) {
-	return {$: 'LoginMode', a: a};
+var $author$project$Auth$Auth$Login = function (a) {
+	return {$: 'Login', a: a};
 };
-var $author$project$Internal$Helpers$Waiting = {$: 'Waiting'};
-var $author$project$Auth$AuthPlugin$LoginChecked = function (a) {
-	return {$: 'LoginChecked', a: a};
+var $the_sett$elm_state_machines$StateMachine$State = function (a) {
+	return {$: 'State', a: a};
 };
-var $author$project$Auth$AuthPlugin$LoggedIn = function (a) {
-	return {$: 'LoggedIn', a: a};
-};
-var $author$project$Auth$AuthPlugin$decodeLoginResult = A3(
-	$elm$json$Json$Decode$map2,
-	F2(
-		function (a, b) {
-			return $author$project$Auth$AuthPlugin$LoggedIn(
-				{sessionId: b, username: a});
-		}),
-	A2($elm$json$Json$Decode$field, 'username', $elm$json$Json$Decode$string),
-	A2($elm$json$Json$Decode$field, 'sessionId', $elm$json$Json$Decode$string));
-var $elm$http$Http$BadStatus_ = F2(
-	function (a, b) {
-		return {$: 'BadStatus_', a: a, b: b};
+var $author$project$Internal$Helpers$Initial = {$: 'Initial'};
+var $author$project$Auth$Internal$Login$initLogin = {password: '', requestStatus: $author$project$Internal$Helpers$Initial, showValidationErrors: false, username: '', validationErrors: $elm$core$Dict$empty};
+var $author$project$Auth$Auth$initAuth = F2(
+	function (username, password) {
+		return $author$project$Auth$Auth$Login(
+			$the_sett$elm_state_machines$StateMachine$State(
+				_Utils_update(
+					$author$project$Auth$Internal$Login$initLogin,
+					{password: password, username: username})));
 	});
-var $elm$http$Http$BadUrl_ = function (a) {
-	return {$: 'BadUrl_', a: a};
-};
-var $elm$http$Http$GoodStatus_ = F2(
-	function (a, b) {
-		return {$: 'GoodStatus_', a: a, b: b};
-	});
-var $elm$http$Http$NetworkError_ = {$: 'NetworkError_'};
-var $elm$http$Http$Receiving = function (a) {
-	return {$: 'Receiving', a: a};
-};
-var $elm$http$Http$Sending = function (a) {
-	return {$: 'Sending', a: a};
-};
-var $elm$http$Http$Timeout_ = {$: 'Timeout_'};
-var $elm$core$Maybe$isJust = function (maybe) {
-	if (maybe.$ === 'Just') {
-		return true;
-	} else {
-		return false;
-	}
-};
-var $elm$core$Platform$sendToSelf = _Platform_sendToSelf;
-var $elm$http$Http$expectStringResponse = F2(
-	function (toMsg, toResult) {
-		return A3(
-			_Http_expect,
-			'',
-			$elm$core$Basics$identity,
-			A2($elm$core$Basics$composeR, toResult, toMsg));
-	});
-var $elm$core$Result$mapError = F2(
-	function (f, result) {
-		if (result.$ === 'Ok') {
-			var v = result.a;
-			return $elm$core$Result$Ok(v);
-		} else {
-			var e = result.a;
-			return $elm$core$Result$Err(
-				f(e));
-		}
-	});
-var $elm$http$Http$BadBody = function (a) {
-	return {$: 'BadBody', a: a};
-};
-var $elm$http$Http$BadStatus = function (a) {
-	return {$: 'BadStatus', a: a};
-};
-var $elm$http$Http$BadUrl = function (a) {
-	return {$: 'BadUrl', a: a};
-};
-var $elm$http$Http$NetworkError = {$: 'NetworkError'};
-var $elm$http$Http$Timeout = {$: 'Timeout'};
-var $elm$http$Http$resolve = F2(
-	function (toResult, response) {
-		switch (response.$) {
-			case 'BadUrl_':
-				var url = response.a;
-				return $elm$core$Result$Err(
-					$elm$http$Http$BadUrl(url));
-			case 'Timeout_':
-				return $elm$core$Result$Err($elm$http$Http$Timeout);
-			case 'NetworkError_':
-				return $elm$core$Result$Err($elm$http$Http$NetworkError);
-			case 'BadStatus_':
-				var metadata = response.a;
-				return $elm$core$Result$Err(
-					$elm$http$Http$BadStatus(metadata.statusCode));
-			default:
-				var body = response.b;
-				return A2(
-					$elm$core$Result$mapError,
-					$elm$http$Http$BadBody,
-					toResult(body));
-		}
-	});
-var $elm$http$Http$expectJson = F2(
-	function (toMsg, decoder) {
-		return A2(
-			$elm$http$Http$expectStringResponse,
-			toMsg,
-			$elm$http$Http$resolve(
-				function (string) {
-					return A2(
-						$elm$core$Result$mapError,
-						$elm$json$Json$Decode$errorToString,
-						A2($elm$json$Json$Decode$decodeString, decoder, string));
-				}));
-	});
-var $elm$http$Http$emptyBody = _Http_emptyBody;
-var $elm$http$Http$Request = function (a) {
-	return {$: 'Request', a: a};
-};
-var $elm$http$Http$State = F2(
-	function (reqs, subs) {
-		return {reqs: reqs, subs: subs};
-	});
-var $elm$http$Http$init = $elm$core$Task$succeed(
-	A2($elm$http$Http$State, $elm$core$Dict$empty, _List_Nil));
-var $elm$core$Process$kill = _Scheduler_kill;
-var $elm$core$Process$spawn = _Scheduler_spawn;
-var $elm$http$Http$updateReqs = F3(
-	function (router, cmds, reqs) {
-		updateReqs:
-		while (true) {
-			if (!cmds.b) {
-				return $elm$core$Task$succeed(reqs);
-			} else {
-				var cmd = cmds.a;
-				var otherCmds = cmds.b;
-				if (cmd.$ === 'Cancel') {
-					var tracker = cmd.a;
-					var _v2 = A2($elm$core$Dict$get, tracker, reqs);
-					if (_v2.$ === 'Nothing') {
-						var $temp$router = router,
-							$temp$cmds = otherCmds,
-							$temp$reqs = reqs;
-						router = $temp$router;
-						cmds = $temp$cmds;
-						reqs = $temp$reqs;
-						continue updateReqs;
-					} else {
-						var pid = _v2.a;
-						return A2(
-							$elm$core$Task$andThen,
-							function (_v3) {
-								return A3(
-									$elm$http$Http$updateReqs,
-									router,
-									otherCmds,
-									A2($elm$core$Dict$remove, tracker, reqs));
-							},
-							$elm$core$Process$kill(pid));
-					}
-				} else {
-					var req = cmd.a;
-					return A2(
-						$elm$core$Task$andThen,
-						function (pid) {
-							var _v4 = req.tracker;
-							if (_v4.$ === 'Nothing') {
-								return A3($elm$http$Http$updateReqs, router, otherCmds, reqs);
-							} else {
-								var tracker = _v4.a;
-								return A3(
-									$elm$http$Http$updateReqs,
-									router,
-									otherCmds,
-									A3($elm$core$Dict$insert, tracker, pid, reqs));
-							}
-						},
-						$elm$core$Process$spawn(
-							A3(
-								_Http_toTask,
-								router,
-								$elm$core$Platform$sendToApp(router),
-								req)));
-				}
-			}
-		}
-	});
-var $elm$http$Http$onEffects = F4(
-	function (router, cmds, subs, state) {
-		return A2(
-			$elm$core$Task$andThen,
-			function (reqs) {
-				return $elm$core$Task$succeed(
-					A2($elm$http$Http$State, reqs, subs));
-			},
-			A3($elm$http$Http$updateReqs, router, cmds, state.reqs));
-	});
-var $elm$http$Http$maybeSend = F4(
-	function (router, desiredTracker, progress, _v0) {
-		var actualTracker = _v0.a;
-		var toMsg = _v0.b;
-		return _Utils_eq(desiredTracker, actualTracker) ? $elm$core$Maybe$Just(
-			A2(
-				$elm$core$Platform$sendToApp,
-				router,
-				toMsg(progress))) : $elm$core$Maybe$Nothing;
-	});
-var $elm$http$Http$onSelfMsg = F3(
-	function (router, _v0, state) {
-		var tracker = _v0.a;
-		var progress = _v0.b;
-		return A2(
-			$elm$core$Task$andThen,
-			function (_v1) {
-				return $elm$core$Task$succeed(state);
-			},
-			$elm$core$Task$sequence(
-				A2(
-					$elm$core$List$filterMap,
-					A3($elm$http$Http$maybeSend, router, tracker, progress),
-					state.subs)));
-	});
-var $elm$http$Http$Cancel = function (a) {
-	return {$: 'Cancel', a: a};
-};
-var $elm$http$Http$cmdMap = F2(
-	function (func, cmd) {
-		if (cmd.$ === 'Cancel') {
-			var tracker = cmd.a;
-			return $elm$http$Http$Cancel(tracker);
-		} else {
-			var r = cmd.a;
-			return $elm$http$Http$Request(
-				{
-					allowCookiesFromOtherDomains: r.allowCookiesFromOtherDomains,
-					body: r.body,
-					expect: A2(_Http_mapExpect, func, r.expect),
-					headers: r.headers,
-					method: r.method,
-					timeout: r.timeout,
-					tracker: r.tracker,
-					url: r.url
-				});
-		}
-	});
-var $elm$http$Http$MySub = F2(
-	function (a, b) {
-		return {$: 'MySub', a: a, b: b};
-	});
-var $elm$http$Http$subMap = F2(
-	function (func, _v0) {
-		var tracker = _v0.a;
-		var toMsg = _v0.b;
-		return A2(
-			$elm$http$Http$MySub,
-			tracker,
-			A2($elm$core$Basics$composeR, toMsg, func));
-	});
-_Platform_effectManagers['Http'] = _Platform_createManager($elm$http$Http$init, $elm$http$Http$onEffects, $elm$http$Http$onSelfMsg, $elm$http$Http$cmdMap, $elm$http$Http$subMap);
-var $elm$http$Http$command = _Platform_leaf('Http');
-var $elm$http$Http$subscription = _Platform_leaf('Http');
-var $elm$http$Http$request = function (r) {
-	return $elm$http$Http$command(
-		$elm$http$Http$Request(
-			{allowCookiesFromOtherDomains: false, body: r.body, expect: r.expect, headers: r.headers, method: r.method, timeout: r.timeout, tracker: r.tracker, url: r.url}));
-};
-var $elm$http$Http$get = function (r) {
-	return $elm$http$Http$request(
-		{body: $elm$http$Http$emptyBody, expect: r.expect, headers: _List_Nil, method: 'GET', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
-};
-var $author$project$Auth$AuthPlugin$checkLogin = $elm$http$Http$get(
-	{
-		expect: A2($elm$http$Http$expectJson, $author$project$Auth$AuthPlugin$LoginChecked, $author$project$Auth$AuthPlugin$decodeLoginResult),
-		url: 'login.php'
-	});
-var $author$project$Auth$AuthPlugin$init = function (externalMsg) {
-	return _Utils_Tuple2(
-		{
-			confirmPassword: '',
-			externalMsg: externalMsg,
-			logInfo: $author$project$Auth$AuthPlugin$LoggedOut,
-			password: '',
-			pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Waiting),
-			username: ''
-		},
-		A2($elm$core$Platform$Cmd$map, externalMsg, $author$project$Auth$AuthPlugin$checkLogin));
-};
+var $author$project$Auth$Auth$init = _Utils_Tuple2(
+	A2($author$project$Auth$Auth$initAuth, '', ''),
+	$elm$core$Platform$Cmd$none);
 var $elm$random$Random$Seed = F2(
 	function (a, b) {
 		return {$: 'Seed', a: a, b: b};
@@ -11129,29 +10940,6 @@ var $elm$random$Random$initialSeed = function (x) {
 	return $elm$random$Random$next(
 		A2($elm$random$Random$Seed, state2, incr));
 };
-var $elm$url$Url$Builder$relative = F2(
-	function (pathSegments, parameters) {
-		return _Utils_ap(
-			A2($elm$core$String$join, '/', pathSegments),
-			$elm$url$Url$Builder$toQuery(parameters));
-	});
-var $elm$core$String$dropRight = F2(
-	function (n, string) {
-		return (n < 1) ? string : A3($elm$core$String$slice, 0, -n, string);
-	});
-var $elm$core$String$endsWith = _String_endsWith;
-var $elm_community$string_extra$String$Extra$unsurround = F2(
-	function (wrapper, string) {
-		if (A2($elm$core$String$startsWith, wrapper, string) && A2($elm$core$String$endsWith, wrapper, string)) {
-			var length = $elm$core$String$length(wrapper);
-			return A2(
-				$elm$core$String$dropRight,
-				length,
-				A2($elm$core$String$dropLeft, length, string));
-		} else {
-			return string;
-		}
-	});
 var $elm$time$Time$Zone = F2(
 	function (a, b) {
 		return {$: 'Zone', a: a, b: b};
@@ -11159,22 +10947,12 @@ var $elm$time$Time$Zone = F2(
 var $elm$time$Time$utc = A2($elm$time$Time$Zone, 0, _List_Nil);
 var $author$project$Main$init = F3(
 	function (flags, url, key) {
-		var path = _Utils_eq(
-			A2($elm_community$string_extra$String$Extra$unsurround, '/', url.path),
-			A2($elm$url$Url$Builder$relative, $author$project$Main$docRoot, _List_Nil)) ? A2(
-			$elm$url$Url$Builder$absolute,
-			_Utils_ap(
-				$author$project$Main$docRoot,
-				_List_fromArray(
-					['home'])),
-			_List_Nil) : url.path;
-		var _v0 = $author$project$Auth$AuthPlugin$init($author$project$Main$AuthMsg);
+		var _v0 = $author$project$Auth$Auth$init;
 		var authPlugin = _v0.a;
 		var authCmd = _v0.b;
 		return _Utils_Tuple2(
 			{
 				authPlugin: authPlugin,
-				currentPosition: {anchor: $elm$core$Maybe$Nothing, path: path},
 				device: $mdgriffith$elm_ui$Element$classifyDevice(
 					{height: flags.height, width: flags.width}),
 				height: flags.height,
@@ -11190,6 +10968,9 @@ var $author$project$Main$init = F3(
 				_List_fromArray(
 					[authCmd])));
 	});
+var $author$project$Main$AuthMsg = function (a) {
+	return {$: 'AuthMsg', a: a};
+};
 var $author$project$Main$VisibilityChange = function (a) {
 	return {$: 'VisibilityChange', a: a};
 };
@@ -11225,10 +11006,12 @@ var $elm$browser$Browser$Events$addKey = function (sub) {
 			name),
 		sub);
 };
+var $elm$core$Process$kill = _Scheduler_kill;
 var $elm$browser$Browser$Events$Event = F2(
 	function (key, event) {
 		return {event: event, key: key};
 	});
+var $elm$core$Platform$sendToSelf = _Platform_sendToSelf;
 var $elm$browser$Browser$Events$spawn = F3(
 	function (router, key, _v0) {
 		var node = _v0.a;
@@ -11405,7 +11188,7 @@ var $elm$browser$Browser$Events$onVisibilityChange = function (func) {
 				'target',
 				A2($elm$json$Json$Decode$field, info.hidden, $elm$json$Json$Decode$bool))));
 };
-var $author$project$Auth$AuthPlugin$Ping = {$: 'Ping'};
+var $author$project$Auth$Auth$Refresh = {$: 'Refresh'};
 var $elm$time$Time$Every = F2(
 	function (a, b) {
 		return {$: 'Every', a: a, b: b};
@@ -11445,6 +11228,7 @@ var $elm$time$Time$Offset = function (a) {
 };
 var $elm$time$Time$customZone = $elm$time$Time$Zone;
 var $elm$time$Time$setInterval = _Time_setInterval;
+var $elm$core$Process$spawn = _Scheduler_spawn;
 var $elm$time$Time$spawnHelp = F3(
 	function (router, intervals, processes) {
 		if (!intervals.b) {
@@ -11582,38 +11366,65 @@ var $elm$time$Time$every = F2(
 			A2($elm$time$Time$Every, interval, tagger));
 	});
 var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
-var $author$project$Auth$AuthPlugin$subscriptions = function (model) {
-	return A2(
-		$elm$core$Platform$Sub$map,
-		model.externalMsg,
-		function () {
-			var _v0 = model.pluginMode;
-			if (_v0.$ === 'LoginMode') {
-				return A2(
-					$elm$time$Time$every,
-					30 * 1000,
-					function (_v1) {
-						return $author$project$Auth$AuthPlugin$Ping;
-					});
-			} else {
-				return $elm$core$Platform$Sub$none;
-			}
-		}());
-};
+var $author$project$Auth$Auth$subscriptions = F2(
+	function (outMsg, auth) {
+		var refreshSub = A2(
+			$elm$time$Time$every,
+			30 * 1000,
+			function (_v3) {
+				return $author$project$Auth$Auth$Refresh;
+			});
+		return A2(
+			$elm$core$Platform$Sub$map,
+			outMsg,
+			function () {
+				switch (auth.$) {
+					case 'AdminControlPanel':
+						return A2(
+							$elm$time$Time$every,
+							30 * 1000,
+							function (_v1) {
+								return $author$project$Auth$Auth$Refresh;
+							});
+					case 'UserControlPanel':
+						return A2(
+							$elm$time$Time$every,
+							30 * 1000,
+							function (_v2) {
+								return $author$project$Auth$Auth$Refresh;
+							});
+					default:
+						return $elm$core$Platform$Sub$none;
+				}
+			}());
+	});
 var $author$project$Main$subscriptions = function (model) {
 	return $elm$core$Platform$Sub$batch(
 		_List_fromArray(
 			[
 				$elm$browser$Browser$Events$onResize($author$project$Main$WinResize),
 				$elm$browser$Browser$Events$onVisibilityChange($author$project$Main$VisibilityChange),
-				$author$project$Auth$AuthPlugin$subscriptions(model.authPlugin)
+				A2($author$project$Auth$Auth$subscriptions, $author$project$Main$AuthMsg, model.authPlugin)
 			]));
 };
 var $author$project$Main$AddLog = function (a) {
 	return {$: 'AddLog', a: a};
 };
-var $author$project$Auth$AuthPlugin$getLogInfo = function (model) {
-	return model.logInfo;
+var $author$project$Auth$Auth$LoggedIn = function (a) {
+	return {$: 'LoggedIn', a: a};
+};
+var $author$project$Auth$Auth$LoggedOut = {$: 'LoggedOut'};
+var $author$project$Auth$Auth$getLogInfo = function (auth) {
+	switch (auth.$) {
+		case 'UserControlPanel':
+			var userProfile = auth.a.a.userProfile;
+			return $author$project$Auth$Auth$LoggedIn(userProfile);
+		case 'AdminControlPanel':
+			var userProfile = auth.a.a.userProfile;
+			return $author$project$Auth$Auth$LoggedIn(userProfile);
+		default:
+			return $author$project$Auth$Auth$LoggedOut;
+	}
 };
 var $Skinney$murmur3$Murmur3$HashData = F4(
 	function (shift, seed, hash, charsProcessed) {
@@ -11877,6 +11688,25 @@ var $elm$url$Url$Parser$parse = F2(
 					url.fragment,
 					$elm$core$Basics$identity)));
 	});
+var $elm$url$Url$Builder$toQueryPair = function (_v0) {
+	var key = _v0.a;
+	var value = _v0.b;
+	return key + ('=' + value);
+};
+var $elm$url$Url$Builder$toQuery = function (parameters) {
+	if (!parameters.b) {
+		return '';
+	} else {
+		return '?' + A2(
+			$elm$core$String$join,
+			'&',
+			A2($elm$core$List$map, $elm$url$Url$Builder$toQueryPair, parameters));
+	}
+};
+var $elm$url$Url$Builder$absolute = F2(
+	function (pathSegments, parameters) {
+		return '/' + (A2($elm$core$String$join, '/', pathSegments) + $elm$url$Url$Builder$toQuery(parameters));
+	});
 var $elm$url$Url$Parser$Parser = function (a) {
 	return {$: 'Parser', a: a};
 };
@@ -11988,60 +11818,39 @@ var $elm$url$Url$Parser$top = $elm$url$Url$Parser$Parser(
 		return _List_fromArray(
 			[state]);
 	});
-var $author$project$Main$pathParser = function () {
-	var rootParser = _Utils_eq($author$project$Main$docRoot, _List_Nil) ? $elm$url$Url$Parser$top : A3(
-		$elm$core$List$foldl,
-		F2(
-			function (seg, acc) {
-				return A2(
-					$elm$url$Url$Parser$slash,
-					acc,
-					$elm$url$Url$Parser$s(seg));
-			}),
-		$elm$url$Url$Parser$top,
-		$author$project$Main$docRoot);
-	return $elm$url$Url$Parser$oneOf(
-		_List_fromArray(
-			[
-				A2(
-				$elm$url$Url$Parser$map,
-				function (anchor) {
-					return _Utils_Tuple2(
-						A2(
-							$elm$url$Url$Builder$absolute,
-							_Utils_ap(
-								$author$project$Main$docRoot,
-								_List_fromArray(
-									['home'])),
-							_List_Nil),
-						anchor);
-				},
-				A2(
-					$elm$url$Url$Parser$slash,
-					rootParser,
-					$elm$url$Url$Parser$fragment($elm$core$Basics$identity))),
-				A2(
-				$elm$url$Url$Parser$map,
-				function (anchor) {
-					return _Utils_Tuple2(
-						A2(
-							$elm$url$Url$Builder$absolute,
-							_Utils_ap(
-								$author$project$Main$docRoot,
-								_List_fromArray(
-									['auth'])),
-							_List_Nil),
-						anchor);
-				},
-				A2(
-					$elm$url$Url$Parser$slash,
-					rootParser,
+var $author$project$Main$pathParser = $elm$url$Url$Parser$oneOf(
+	_List_fromArray(
+		[
+			A2(
+			$elm$url$Url$Parser$map,
+			function (anchor) {
+				return _Utils_Tuple2(
+					A2($elm$url$Url$Builder$absolute, _List_Nil, _List_Nil),
+					anchor);
+			},
+			A2(
+				$elm$url$Url$Parser$slash,
+				$elm$url$Url$Parser$top,
+				$elm$url$Url$Parser$fragment($elm$core$Basics$identity))),
+			A2(
+			$elm$url$Url$Parser$map,
+			function (anchor) {
+				return _Utils_Tuple2(
 					A2(
-						$elm$url$Url$Parser$slash,
-						$elm$url$Url$Parser$s('auth'),
-						$elm$url$Url$Parser$fragment($elm$core$Basics$identity))))
-			]));
-}();
+						$elm$url$Url$Builder$absolute,
+						_List_fromArray(
+							['auth']),
+						_List_Nil),
+					anchor);
+			},
+			A2(
+				$elm$url$Url$Parser$slash,
+				$elm$url$Url$Parser$top,
+				A2(
+					$elm$url$Url$Parser$slash,
+					$elm$url$Url$Parser$s('auth'),
+					$elm$url$Url$Parser$fragment($elm$core$Basics$identity))))
+		]));
 var $elm$browser$Browser$Navigation$pushUrl = _Browser_pushUrl;
 var $elm$core$Dict$member = F2(
 	function (key, dict) {
@@ -12115,79 +11924,334 @@ var $elm$url$Url$toString = function (url) {
 					_Utils_ap(http, url.host)),
 				url.path)));
 };
+var $author$project$Auth$Auth$CodeVerification = F2(
+	function (a, b) {
+		return {$: 'CodeVerification', a: a, b: b};
+	});
 var $author$project$Internal$Helpers$Failure = {$: 'Failure'};
-var $author$project$Internal$Helpers$Initial = {$: 'Initial'};
-var $author$project$Auth$AuthPlugin$LogoutMode = function (a) {
-	return {$: 'LogoutMode', a: a};
+var $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest = function (a) {
+	return {$: 'InitiatingPasswordResetRequest', a: a};
 };
-var $author$project$Internal$Helpers$PluginQuit = {$: 'PluginQuit'};
-var $author$project$Auth$AuthPlugin$SignUpMode = function (a) {
-	return {$: 'SignUpMode', a: a};
+var $author$project$Auth$Auth$Logout = function (a) {
+	return {$: 'Logout', a: a};
+};
+var $author$project$Auth$Auth$LogoutRequestResult = function (a) {
+	return {$: 'LogoutRequestResult', a: a};
+};
+var $author$project$Auth$Auth$PasswordReset = function (a) {
+	return {$: 'PasswordReset', a: a};
+};
+var $author$project$Auth$Auth$Signup = function (a) {
+	return {$: 'Signup', a: a};
 };
 var $author$project$Internal$Helpers$Success = {$: 'Success'};
+var $author$project$Auth$Auth$ToLogin = F2(
+	function (a, b) {
+		return {$: 'ToLogin', a: a, b: b};
+	});
+var $author$project$Auth$Auth$ToPasswordReset = function (a) {
+	return {$: 'ToPasswordReset', a: a};
+};
+var $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest = function (a) {
+	return {$: 'UpdatingPasswordRequest', a: a};
+};
 var $author$project$Internal$Helpers$httpErrorToString = function (e) {
 	switch (e.$) {
 		case 'BadUrl':
 			var s = e.a;
-			return 'Url invalide: ' + s;
+			return 'Bad Url: ' + s;
 		case 'Timeout':
-			return 'Délai d\'attente dépassé';
+			return 'Timeout';
 		case 'NetworkError':
-			return 'Erreur de réseau';
+			return 'Network error';
 		case 'BadStatus':
 			var statusCode = e.a;
-			return 'Erreur serveur: ' + $elm$core$String$fromInt(statusCode);
+			return 'Bad status: ' + $elm$core$String$fromInt(statusCode);
 		default:
 			var details = e.a;
-			return 'Erreur décodage: ' + details;
+			return 'Unexpected Json: ' + details;
 	}
 };
-var $author$project$Auth$AuthPlugin$ConfirmLogin = function (a) {
-	return {$: 'ConfirmLogin', a: a};
+var $author$project$Auth$Internal$CodeVerification$CodeVerification = {$: 'CodeVerification'};
+var $author$project$Auth$Internal$CodeVerification$initCodeVerificationModel = {askForEmail: false, code: '', email: '', internalStatus: $author$project$Auth$Internal$CodeVerification$CodeVerification, newCodeRequestStatus: $author$project$Internal$Helpers$Initial, requestStatus: $author$project$Internal$Helpers$Initial, showValidationErrors: false, validationErrors: $elm$core$Dict$empty, verificationEndpoint: '', verificationNotice: ''};
+var $author$project$Auth$Internal$Logout$LogoutSuccess = {$: 'LogoutSuccess'};
+var $elm$json$Json$Decode$fail = _Json_fail;
+var $author$project$Auth$Common$decodeConstant = F2(
+	function (c, v) {
+		return A2(
+			$elm$json$Json$Decode$andThen,
+			function (s) {
+				return _Utils_eq(s, c) ? $elm$json$Json$Decode$succeed(v) : $elm$json$Json$Decode$fail('wrong constant');
+			},
+			$elm$json$Json$Decode$string);
+	});
+var $author$project$Auth$Internal$Logout$decodeLogoutSuccess = A2($author$project$Auth$Common$decodeConstant, 'LOGOUT SUCCESS', $author$project$Auth$Internal$Logout$LogoutSuccess);
+var $author$project$Auth$Internal$Logout$LogoutNotLoggedIn = {$: 'LogoutNotLoggedIn'};
+var $author$project$Auth$Internal$Logout$decodeNotLoggedIn = A2($author$project$Auth$Common$decodeConstant, 'NOT LOGGED IN', $author$project$Auth$Internal$Logout$LogoutNotLoggedIn);
+var $elm$json$Json$Decode$oneOf = _Json_oneOf;
+var $author$project$Auth$Internal$Logout$decodeLogoutMessage = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$Logout$decodeLogoutSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Logout$decodeNotLoggedIn)
+		]));
+var $elm$http$Http$BadStatus_ = F2(
+	function (a, b) {
+		return {$: 'BadStatus_', a: a, b: b};
+	});
+var $elm$http$Http$BadUrl_ = function (a) {
+	return {$: 'BadUrl_', a: a};
 };
-var $elm$http$Http$jsonBody = function (value) {
-	return A2(
-		_Http_pair,
-		'application/json',
-		A2($elm$json$Json$Encode$encode, 0, value));
+var $elm$http$Http$GoodStatus_ = F2(
+	function (a, b) {
+		return {$: 'GoodStatus_', a: a, b: b};
+	});
+var $elm$http$Http$NetworkError_ = {$: 'NetworkError_'};
+var $elm$http$Http$Receiving = function (a) {
+	return {$: 'Receiving', a: a};
 };
-var $elm$http$Http$post = function (r) {
+var $elm$http$Http$Sending = function (a) {
+	return {$: 'Sending', a: a};
+};
+var $elm$http$Http$Timeout_ = {$: 'Timeout_'};
+var $elm$core$Maybe$isJust = function (maybe) {
+	if (maybe.$ === 'Just') {
+		return true;
+	} else {
+		return false;
+	}
+};
+var $elm$http$Http$expectStringResponse = F2(
+	function (toMsg, toResult) {
+		return A3(
+			_Http_expect,
+			'',
+			$elm$core$Basics$identity,
+			A2($elm$core$Basics$composeR, toResult, toMsg));
+	});
+var $elm$core$Result$mapError = F2(
+	function (f, result) {
+		if (result.$ === 'Ok') {
+			var v = result.a;
+			return $elm$core$Result$Ok(v);
+		} else {
+			var e = result.a;
+			return $elm$core$Result$Err(
+				f(e));
+		}
+	});
+var $elm$http$Http$BadBody = function (a) {
+	return {$: 'BadBody', a: a};
+};
+var $elm$http$Http$BadStatus = function (a) {
+	return {$: 'BadStatus', a: a};
+};
+var $elm$http$Http$BadUrl = function (a) {
+	return {$: 'BadUrl', a: a};
+};
+var $elm$http$Http$NetworkError = {$: 'NetworkError'};
+var $elm$http$Http$Timeout = {$: 'Timeout'};
+var $elm$http$Http$resolve = F2(
+	function (toResult, response) {
+		switch (response.$) {
+			case 'BadUrl_':
+				var url = response.a;
+				return $elm$core$Result$Err(
+					$elm$http$Http$BadUrl(url));
+			case 'Timeout_':
+				return $elm$core$Result$Err($elm$http$Http$Timeout);
+			case 'NetworkError_':
+				return $elm$core$Result$Err($elm$http$Http$NetworkError);
+			case 'BadStatus_':
+				var metadata = response.a;
+				return $elm$core$Result$Err(
+					$elm$http$Http$BadStatus(metadata.statusCode));
+			default:
+				var body = response.b;
+				return A2(
+					$elm$core$Result$mapError,
+					$elm$http$Http$BadBody,
+					toResult(body));
+		}
+	});
+var $elm$http$Http$expectJson = F2(
+	function (toMsg, decoder) {
+		return A2(
+			$elm$http$Http$expectStringResponse,
+			toMsg,
+			$elm$http$Http$resolve(
+				function (string) {
+					return A2(
+						$elm$core$Result$mapError,
+						$elm$json$Json$Decode$errorToString,
+						A2($elm$json$Json$Decode$decodeString, decoder, string));
+				}));
+	});
+var $elm$http$Http$emptyBody = _Http_emptyBody;
+var $elm$http$Http$Request = function (a) {
+	return {$: 'Request', a: a};
+};
+var $elm$http$Http$State = F2(
+	function (reqs, subs) {
+		return {reqs: reqs, subs: subs};
+	});
+var $elm$http$Http$init = $elm$core$Task$succeed(
+	A2($elm$http$Http$State, $elm$core$Dict$empty, _List_Nil));
+var $elm$http$Http$updateReqs = F3(
+	function (router, cmds, reqs) {
+		updateReqs:
+		while (true) {
+			if (!cmds.b) {
+				return $elm$core$Task$succeed(reqs);
+			} else {
+				var cmd = cmds.a;
+				var otherCmds = cmds.b;
+				if (cmd.$ === 'Cancel') {
+					var tracker = cmd.a;
+					var _v2 = A2($elm$core$Dict$get, tracker, reqs);
+					if (_v2.$ === 'Nothing') {
+						var $temp$router = router,
+							$temp$cmds = otherCmds,
+							$temp$reqs = reqs;
+						router = $temp$router;
+						cmds = $temp$cmds;
+						reqs = $temp$reqs;
+						continue updateReqs;
+					} else {
+						var pid = _v2.a;
+						return A2(
+							$elm$core$Task$andThen,
+							function (_v3) {
+								return A3(
+									$elm$http$Http$updateReqs,
+									router,
+									otherCmds,
+									A2($elm$core$Dict$remove, tracker, reqs));
+							},
+							$elm$core$Process$kill(pid));
+					}
+				} else {
+					var req = cmd.a;
+					return A2(
+						$elm$core$Task$andThen,
+						function (pid) {
+							var _v4 = req.tracker;
+							if (_v4.$ === 'Nothing') {
+								return A3($elm$http$Http$updateReqs, router, otherCmds, reqs);
+							} else {
+								var tracker = _v4.a;
+								return A3(
+									$elm$http$Http$updateReqs,
+									router,
+									otherCmds,
+									A3($elm$core$Dict$insert, tracker, pid, reqs));
+							}
+						},
+						$elm$core$Process$spawn(
+							A3(
+								_Http_toTask,
+								router,
+								$elm$core$Platform$sendToApp(router),
+								req)));
+				}
+			}
+		}
+	});
+var $elm$http$Http$onEffects = F4(
+	function (router, cmds, subs, state) {
+		return A2(
+			$elm$core$Task$andThen,
+			function (reqs) {
+				return $elm$core$Task$succeed(
+					A2($elm$http$Http$State, reqs, subs));
+			},
+			A3($elm$http$Http$updateReqs, router, cmds, state.reqs));
+	});
+var $elm$http$Http$maybeSend = F4(
+	function (router, desiredTracker, progress, _v0) {
+		var actualTracker = _v0.a;
+		var toMsg = _v0.b;
+		return _Utils_eq(desiredTracker, actualTracker) ? $elm$core$Maybe$Just(
+			A2(
+				$elm$core$Platform$sendToApp,
+				router,
+				toMsg(progress))) : $elm$core$Maybe$Nothing;
+	});
+var $elm$http$Http$onSelfMsg = F3(
+	function (router, _v0, state) {
+		var tracker = _v0.a;
+		var progress = _v0.b;
+		return A2(
+			$elm$core$Task$andThen,
+			function (_v1) {
+				return $elm$core$Task$succeed(state);
+			},
+			$elm$core$Task$sequence(
+				A2(
+					$elm$core$List$filterMap,
+					A3($elm$http$Http$maybeSend, router, tracker, progress),
+					state.subs)));
+	});
+var $elm$http$Http$Cancel = function (a) {
+	return {$: 'Cancel', a: a};
+};
+var $elm$http$Http$cmdMap = F2(
+	function (func, cmd) {
+		if (cmd.$ === 'Cancel') {
+			var tracker = cmd.a;
+			return $elm$http$Http$Cancel(tracker);
+		} else {
+			var r = cmd.a;
+			return $elm$http$Http$Request(
+				{
+					allowCookiesFromOtherDomains: r.allowCookiesFromOtherDomains,
+					body: r.body,
+					expect: A2(_Http_mapExpect, func, r.expect),
+					headers: r.headers,
+					method: r.method,
+					timeout: r.timeout,
+					tracker: r.tracker,
+					url: r.url
+				});
+		}
+	});
+var $elm$http$Http$MySub = F2(
+	function (a, b) {
+		return {$: 'MySub', a: a, b: b};
+	});
+var $elm$http$Http$subMap = F2(
+	function (func, _v0) {
+		var tracker = _v0.a;
+		var toMsg = _v0.b;
+		return A2(
+			$elm$http$Http$MySub,
+			tracker,
+			A2($elm$core$Basics$composeR, toMsg, func));
+	});
+_Platform_effectManagers['Http'] = _Platform_createManager($elm$http$Http$init, $elm$http$Http$onEffects, $elm$http$Http$onSelfMsg, $elm$http$Http$cmdMap, $elm$http$Http$subMap);
+var $elm$http$Http$command = _Platform_leaf('Http');
+var $elm$http$Http$subscription = _Platform_leaf('Http');
+var $elm$http$Http$request = function (r) {
+	return $elm$http$Http$command(
+		$elm$http$Http$Request(
+			{allowCookiesFromOtherDomains: false, body: r.body, expect: r.expect, headers: r.headers, method: r.method, timeout: r.timeout, tracker: r.tracker, url: r.url}));
+};
+var $elm$http$Http$get = function (r) {
 	return $elm$http$Http$request(
-		{body: r.body, expect: r.expect, headers: _List_Nil, method: 'POST', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
+		{body: $elm$http$Http$emptyBody, expect: r.expect, headers: _List_Nil, method: 'GET', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
 };
-var $author$project$Auth$AuthPlugin$login = function (model) {
-	var body = $elm$http$Http$jsonBody(
-		$elm$json$Json$Encode$object(
-			_List_fromArray(
-				[
-					_Utils_Tuple2(
-					'username',
-					$elm$json$Json$Encode$string(
-						function ($) {
-							return $.username;
-						}(model))),
-					_Utils_Tuple2(
-					'password',
-					$elm$json$Json$Encode$string(
-						function ($) {
-							return $.password;
-						}(model)))
-				])));
-	return $elm$http$Http$post(
+var $author$project$Auth$Internal$Logout$logout = function (handler) {
+	return $elm$http$Http$get(
 		{
-			body: body,
-			expect: A2($elm$http$Http$expectJson, $author$project$Auth$AuthPlugin$ConfirmLogin, $author$project$Auth$AuthPlugin$decodeLoginResult),
-			url: 'login.php'
+			expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$Logout$decodeLogoutMessage),
+			url: '/api/logout'
 		});
 };
-var $author$project$Auth$AuthPlugin$ConfirmLogout = function (a) {
-	return {$: 'ConfirmLogout', a: a};
-};
-var $author$project$Auth$AuthPlugin$decodeLogoutResult = A2($elm$json$Json$Decode$field, 'notLoggedIn', $elm$json$Json$Decode$bool);
-var $author$project$Auth$AuthPlugin$logout = $elm$http$Http$get(
-	{
-		expect: A2($elm$http$Http$expectJson, $author$project$Auth$AuthPlugin$ConfirmLogout, $author$project$Auth$AuthPlugin$decodeLogoutResult),
-		url: 'logout.php'
+var $the_sett$elm_state_machines$StateMachine$map = F2(
+	function (f, _v0) {
+		var x = _v0.a;
+		return $the_sett$elm_state_machines$StateMachine$State(
+			f(x));
 	});
 var $author$project$Internal$Logger$Log = F5(
 	function (message, mbDetails, isError, isImportant, timeStamp) {
@@ -12206,292 +12270,1883 @@ var $author$project$Internal$Logger$newLog = F5(
 				},
 				$elm$time$Time$now));
 	});
-var $author$project$Auth$AuthPlugin$PingResult = function (a) {
-	return {$: 'PingResult', a: a};
+var $author$project$Internal$Logger$newLogR = F2(
+	function (config, r) {
+		return A5($author$project$Internal$Logger$newLog, config.addLogMsg, r.logMsg, r.details, r.isError, r.isImportant);
+	});
+var $author$project$Auth$Auth$RefreshResult = function (a) {
+	return {$: 'RefreshResult', a: a};
 };
-var $author$project$Auth$AuthPlugin$decodePing = A2(
+var $author$project$Auth$Auth$decodeRefresh = A2(
 	$elm$json$Json$Decode$map,
 	function (s) {
 		return s === 'success!';
 	},
 	A2($elm$json$Json$Decode$field, 'message', $elm$json$Json$Decode$string));
-var $author$project$Auth$AuthPlugin$ping = function (sessionId) {
-	var body = $elm$http$Http$jsonBody(
-		$elm$json$Json$Encode$object(
-			_List_fromArray(
-				[
-					_Utils_Tuple2(
-					'sessionId',
-					$elm$json$Json$Encode$string(sessionId))
-				])));
-	return $elm$http$Http$post(
-		{
-			body: body,
-			expect: A2($elm$http$Http$expectJson, $author$project$Auth$AuthPlugin$PingResult, $author$project$Auth$AuthPlugin$decodePing),
-			url: 'ping.php'
-		});
-};
-var $author$project$Auth$AuthPlugin$ConfirmSignUp = function (a) {
-	return {$: 'ConfirmSignUp', a: a};
-};
-var $author$project$Auth$AuthPlugin$decodeSignupResult = A2($elm$json$Json$Decode$field, 'signUpComplete', $elm$json$Json$Decode$bool);
-var $author$project$Auth$AuthPlugin$signUp = function (model) {
-	var body = $elm$http$Http$jsonBody(
-		$elm$json$Json$Encode$object(
-			_List_fromArray(
-				[
-					_Utils_Tuple2(
-					'username',
-					$elm$json$Json$Encode$string(
-						function ($) {
-							return $.username;
-						}(model))),
-					_Utils_Tuple2(
-					'password',
-					$elm$json$Json$Encode$string(
-						function ($) {
-							return $.password;
-						}(model)))
-				])));
-	return $elm$http$Http$post(
-		{
-			body: body,
-			expect: A2($elm$http$Http$expectJson, $author$project$Auth$AuthPlugin$ConfirmSignUp, $author$project$Auth$AuthPlugin$decodeSignupResult),
-			url: 'signup.php'
-		});
-};
-var $author$project$Auth$AuthPlugin$update = F3(
-	function (config, msg, model) {
-		switch (msg.$) {
-			case 'SetUsername':
-				var s = msg.a;
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{username: s}),
-					$elm$core$Platform$Cmd$none,
-					$elm$core$Maybe$Nothing);
-			case 'SetPassword':
-				var s = msg.a;
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{password: s}),
-					$elm$core$Platform$Cmd$none,
-					$elm$core$Maybe$Nothing);
-			case 'SetConfirmPassword':
-				var s = msg.a;
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{confirmPassword: s}),
-					$elm$core$Platform$Cmd$none,
-					$elm$core$Maybe$Nothing);
-			case 'Login':
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{
-							pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Waiting)
-						}),
-					A2(
-						$elm$core$Platform$Cmd$map,
-						model.externalMsg,
-						$author$project$Auth$AuthPlugin$login(model)),
-					$elm$core$Maybe$Nothing);
-			case 'LoginChecked':
-				var res = msg.a;
-				if (res.$ === 'Err') {
-					var e = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: $author$project$Auth$AuthPlugin$LoggedOut,
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				} else {
-					var logInfo = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: logInfo,
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Success)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Just($author$project$Internal$Helpers$PluginQuit));
-				}
-			case 'ConfirmLogin':
-				var res = msg.a;
-				if (res.$ === 'Err') {
-					var e = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: $author$project$Auth$AuthPlugin$LoggedOut,
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Failure)
-							}),
-						A5(
-							$author$project$Internal$Logger$newLog,
-							config.addLog,
-							'Echec connexion',
-							$elm$core$Maybe$Just(
-								$author$project$Internal$Helpers$httpErrorToString(e)),
-							true,
-							true),
-						$elm$core$Maybe$Nothing);
-				} else {
-					var logInfo = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: logInfo,
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Success)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				}
-			case 'SignUp':
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{
-							pluginMode: $author$project$Auth$AuthPlugin$SignUpMode($author$project$Internal$Helpers$Waiting)
-						}),
-					A2(
-						$elm$core$Platform$Cmd$map,
-						model.externalMsg,
-						$author$project$Auth$AuthPlugin$signUp(model)),
-					$elm$core$Maybe$Nothing);
-			case 'ConfirmSignUp':
-				var res = msg.a;
-				if (res.$ === 'Err') {
-					var e = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								pluginMode: $author$project$Auth$AuthPlugin$SignUpMode($author$project$Internal$Helpers$Failure)
-							}),
-						A5(
-							$author$project$Internal$Logger$newLog,
-							config.addLog,
-							'Echec création compte',
-							$elm$core$Maybe$Just(
-								$author$project$Internal$Helpers$httpErrorToString(e)),
-							true,
-							true),
-						$elm$core$Maybe$Nothing);
-				} else {
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								pluginMode: $author$project$Auth$AuthPlugin$SignUpMode($author$project$Internal$Helpers$Success)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				}
-			case 'Logout':
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{
-							pluginMode: $author$project$Auth$AuthPlugin$LogoutMode($author$project$Internal$Helpers$Waiting)
-						}),
-					A2($elm$core$Platform$Cmd$map, model.externalMsg, $author$project$Auth$AuthPlugin$logout),
-					$elm$core$Maybe$Nothing);
-			case 'ConfirmLogout':
-				var res = msg.a;
-				if (res.$ === 'Err') {
-					var e = res.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								pluginMode: $author$project$Auth$AuthPlugin$LogoutMode($author$project$Internal$Helpers$Failure)
-							}),
-						A5(
-							$author$project$Internal$Logger$newLog,
-							config.addLog,
-							'Echec déconnexion',
-							$elm$core$Maybe$Just(
-								$author$project$Internal$Helpers$httpErrorToString(e)),
-							true,
-							true),
-						$elm$core$Maybe$Nothing);
-				} else {
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: $author$project$Auth$AuthPlugin$LoggedOut,
-								pluginMode: $author$project$Auth$AuthPlugin$LogoutMode($author$project$Internal$Helpers$Success)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				}
-			case 'ChangePluginMode':
-				var mode = msg.a;
-				return _Utils_Tuple3(
-					_Utils_update(
-						model,
-						{pluginMode: mode}),
-					$elm$core$Platform$Cmd$none,
-					$elm$core$Maybe$Nothing);
-			case 'Ping':
-				var _v5 = model.logInfo;
-				if (_v5.$ === 'LoggedIn') {
-					var li = _v5.a;
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Waiting)
-							}),
-						A2(
-							$elm$core$Platform$Cmd$map,
-							model.externalMsg,
-							$author$project$Auth$AuthPlugin$ping(li.sessionId)),
-						$elm$core$Maybe$Nothing);
-				} else {
-					return _Utils_Tuple3(model, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
-				}
-			case 'PingResult':
-				var res = msg.a;
-				if ((res.$ === 'Ok') && res.a) {
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Success)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				} else {
-					return _Utils_Tuple3(
-						_Utils_update(
-							model,
-							{
-								logInfo: $author$project$Auth$AuthPlugin$LoggedOut,
-								pluginMode: $author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Failure)
-							}),
-						$elm$core$Platform$Cmd$none,
-						$elm$core$Maybe$Nothing);
-				}
-			case 'Quit':
-				return _Utils_Tuple3(
-					model,
-					$elm$core$Platform$Cmd$none,
-					$elm$core$Maybe$Just($author$project$Internal$Helpers$PluginQuit));
+var $author$project$Auth$Auth$refresh = $elm$http$Http$get(
+	{
+		expect: A2($elm$http$Http$expectJson, $author$project$Auth$Auth$RefreshResult, $author$project$Auth$Auth$decodeRefresh),
+		url: '/api/refresh'
+	});
+var $author$project$Auth$Auth$setConfirmPassword = F2(
+	function (auth, name) {
+		var setStateConfirmPassword = F2(
+			function (state, s) {
+				return A2(
+					$the_sett$elm_state_machines$StateMachine$map,
+					function (m) {
+						return _Utils_update(
+							m,
+							{confirmPassword: s});
+					},
+					state);
+			});
+		switch (auth.$) {
+			case 'Signup':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Signup(
+					A2(setStateConfirmPassword, state, name));
+			case 'PasswordReset':
+				var state = auth.a;
+				return $author$project$Auth$Auth$PasswordReset(
+					A2(setStateConfirmPassword, state, name));
 			default:
-				return _Utils_Tuple3(model, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
+				return auth;
 		}
+	});
+var $author$project$Auth$Auth$setEmail = F2(
+	function (auth, email) {
+		var setStateEmail = F2(
+			function (state, s) {
+				return A2(
+					$the_sett$elm_state_machines$StateMachine$map,
+					function (m) {
+						return _Utils_update(
+							m,
+							{email: s});
+					},
+					state);
+			});
+		switch (auth.$) {
+			case 'Signup':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Signup(
+					A2(setStateEmail, state, email));
+			case 'PasswordReset':
+				var state = auth.a;
+				return $author$project$Auth$Auth$PasswordReset(
+					A2(setStateEmail, state, email));
+			case 'CodeVerification':
+				var onVerified = auth.a;
+				var state = auth.b;
+				return A2(
+					$author$project$Auth$Auth$CodeVerification,
+					onVerified,
+					A2(setStateEmail, state, email));
+			default:
+				return auth;
+		}
+	});
+var $author$project$Auth$Auth$setPassword = F2(
+	function (auth, name) {
+		var setStatePassword = F2(
+			function (state, s) {
+				return A2(
+					$the_sett$elm_state_machines$StateMachine$map,
+					function (m) {
+						return _Utils_update(
+							m,
+							{password: s});
+					},
+					state);
+			});
+		switch (auth.$) {
+			case 'Login':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Login(
+					A2(setStatePassword, state, name));
+			case 'Signup':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Signup(
+					A2(setStatePassword, state, name));
+			case 'PasswordReset':
+				var state = auth.a;
+				return $author$project$Auth$Auth$PasswordReset(
+					A2(setStatePassword, state, name));
+			default:
+				return auth;
+		}
+	});
+var $author$project$Auth$Auth$setStateRequestStatus = F2(
+	function (state, status) {
+		return A2(
+			$the_sett$elm_state_machines$StateMachine$map,
+			function (m) {
+				return _Utils_update(
+					m,
+					{requestStatus: status});
+			},
+			state);
+	});
+var $author$project$Auth$Auth$setUsername = F2(
+	function (auth, name) {
+		var setStateUsername = F2(
+			function (state, s) {
+				return A2(
+					$the_sett$elm_state_machines$StateMachine$map,
+					function (m) {
+						return _Utils_update(
+							m,
+							{username: s});
+					},
+					state);
+			});
+		switch (auth.$) {
+			case 'Login':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Login(
+					A2(setStateUsername, state, name));
+			case 'Signup':
+				var state = auth.a;
+				return $author$project$Auth$Auth$Signup(
+					A2(setStateUsername, state, name));
+			default:
+				return auth;
+		}
+	});
+var $author$project$Auth$Auth$toCodeVerification = F3(
+	function (state, onVerified, codeVerificationModel) {
+		return A2(
+			$author$project$Auth$Auth$CodeVerification,
+			onVerified,
+			$the_sett$elm_state_machines$StateMachine$State(codeVerificationModel));
+	});
+var $author$project$Auth$Auth$AdminControlPanel = function (a) {
+	return {$: 'AdminControlPanel', a: a};
+};
+var $author$project$Auth$Auth$UserControlPanel = function (a) {
+	return {$: 'UserControlPanel', a: a};
+};
+var $author$project$Auth$Internal$AdminControlPanel$initAdminControlPanelModel = function (userProfile) {
+	return {confirmPassword: '', newEmail: '', password: '', showValidationErrors: false, userProfile: userProfile, validationErrors: $elm$core$Dict$empty};
+};
+var $author$project$Auth$Internal$UserControlPanel$initUserControlPanelModel = function (userProfile) {
+	return {confirmPassword: '', newEmail: '', password: '', showValidationErrors: false, userProfile: userProfile, validationErrors: $elm$core$Dict$empty};
+};
+var $author$project$Auth$Auth$toLoggedState = F2(
+	function (state, userProfile) {
+		var _v0 = userProfile.role;
+		if (_v0.$ === 'User') {
+			return $author$project$Auth$Auth$UserControlPanel(
+				$the_sett$elm_state_machines$StateMachine$State(
+					$author$project$Auth$Internal$UserControlPanel$initUserControlPanelModel(userProfile)));
+		} else {
+			return $author$project$Auth$Auth$AdminControlPanel(
+				$the_sett$elm_state_machines$StateMachine$State(
+					$author$project$Auth$Internal$AdminControlPanel$initAdminControlPanelModel(userProfile)));
+		}
+	});
+var $author$project$Auth$Auth$LoginRequestResult = function (a) {
+	return {$: 'LoginRequestResult', a: a};
+};
+var $author$project$Internal$Helpers$Waiting = {$: 'Waiting'};
+var $author$project$Auth$Internal$Login$LoginSuccess = function (a) {
+	return {$: 'LoginSuccess', a: a};
+};
+var $author$project$Auth$Internal$Login$LoginNeedEmailConfirmation = {$: 'LoginNeedEmailConfirmation'};
+var $author$project$Auth$Internal$Login$decodeLoginNeedEmailConfirmation = A2($author$project$Auth$Common$decodeConstant, 'NEED EMAIL VERIFICATION', $author$project$Auth$Internal$Login$LoginNeedEmailConfirmation);
+var $author$project$Auth$Internal$Login$LoginTooManyRequests = {$: 'LoginTooManyRequests'};
+var $author$project$Auth$Internal$Login$decodeLoginTooManyRequests = A2($author$project$Auth$Common$decodeConstant, 'TOO MANY REQUESTS', $author$project$Auth$Internal$Login$LoginTooManyRequests);
+var $author$project$Auth$Internal$Login$LoginWrongCredentials = {$: 'LoginWrongCredentials'};
+var $author$project$Auth$Internal$Login$decodeLoginWrongCredentials = A2($author$project$Auth$Common$decodeConstant, 'WRONG CREDENTIALS', $author$project$Auth$Internal$Login$LoginWrongCredentials);
+var $author$project$Auth$Internal$Login$LoginUnknownUsername = {$: 'LoginUnknownUsername'};
+var $author$project$Auth$Internal$Login$decodeUnknownUsername = A2($author$project$Auth$Common$decodeConstant, 'UNKNOWN USERNAME', $author$project$Auth$Internal$Login$LoginUnknownUsername);
+var $author$project$Auth$Common$UserProfile = F3(
+	function (username, email, role) {
+		return {email: email, role: role, username: username};
+	});
+var $author$project$Auth$Common$Admin = {$: 'Admin'};
+var $author$project$Auth$Internal$Login$decodeRole = $elm$json$Json$Decode$succeed($author$project$Auth$Common$Admin);
+var $NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$custom = $elm$json$Json$Decode$map2($elm$core$Basics$apR);
+var $NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required = F3(
+	function (key, valDecoder, decoder) {
+		return A2(
+			$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$custom,
+			A2($elm$json$Json$Decode$field, key, valDecoder),
+			decoder);
+	});
+var $author$project$Auth$Internal$Login$decodeUserProfile = A3(
+	$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+	'roles',
+	$author$project$Auth$Internal$Login$decodeRole,
+	A3(
+		$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+		'email',
+		$elm$json$Json$Decode$string,
+		A3(
+			$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+			'username',
+			$elm$json$Json$Decode$string,
+			$elm$json$Json$Decode$succeed($author$project$Auth$Common$UserProfile))));
+var $author$project$Auth$Internal$Login$decodeLoginResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2(
+			$elm$json$Json$Decode$map,
+			$author$project$Auth$Internal$Login$LoginSuccess,
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$Login$decodeUserProfile)),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Login$decodeUnknownUsername),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Login$decodeLoginWrongCredentials),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Login$decodeLoginNeedEmailConfirmation),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Login$decodeLoginTooManyRequests)
+		]));
+var $rtfeldman$elm_validate$Validate$fromValid = function (_v0) {
+	var subject = _v0.a;
+	return subject;
+};
+var $elm$http$Http$jsonBody = function (value) {
+	return A2(
+		_Http_pair,
+		'application/json',
+		A2($elm$json$Json$Encode$encode, 0, value));
+};
+var $elm$http$Http$post = function (r) {
+	return $elm$http$Http$request(
+		{body: r.body, expect: r.expect, headers: _List_Nil, method: 'POST', timeout: $elm$core$Maybe$Nothing, tracker: $elm$core$Maybe$Nothing, url: r.url});
+};
+var $author$project$Auth$Internal$Login$login = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'username',
+						$elm$json$Json$Encode$string(model.username)),
+						_Utils_Tuple2(
+						'password',
+						$elm$json$Json$Encode$string(model.password))
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$Login$decodeLoginResult),
+				url: '/api/login'
+			});
+	});
+var $rtfeldman$elm_validate$Validate$Validator = function (a) {
+	return {$: 'Validator', a: a};
+};
+var $rtfeldman$elm_validate$Validate$all = function (validators) {
+	var newGetErrors = function (subject) {
+		var accumulateErrors = F2(
+			function (_v0, totalErrors) {
+				var getErrors = _v0.a;
+				return _Utils_ap(
+					totalErrors,
+					getErrors(subject));
+			});
+		return A3($elm$core$List$foldl, accumulateErrors, _List_Nil, validators);
+	};
+	return $rtfeldman$elm_validate$Validate$Validator(newGetErrors);
+};
+var $elm_community$dict_extra$Dict$Extra$insertDedupe = F4(
+	function (combine, key, value, dict) {
+		var _with = function (mbValue) {
+			if (mbValue.$ === 'Just') {
+				var oldValue = mbValue.a;
+				return $elm$core$Maybe$Just(
+					A2(combine, oldValue, value));
+			} else {
+				return $elm$core$Maybe$Just(value);
+			}
+		};
+		return A3($elm$core$Dict$update, key, _with, dict);
+	});
+var $elm_community$dict_extra$Dict$Extra$fromListDedupe = F2(
+	function (combine, xs) {
+		return A3(
+			$elm$core$List$foldl,
+			F2(
+				function (_v0, acc) {
+					var key = _v0.a;
+					var value = _v0.b;
+					return A4($elm_community$dict_extra$Dict$Extra$insertDedupe, combine, key, value, acc);
+				}),
+			$elm$core$Dict$empty,
+			xs);
+	});
+var $author$project$Auth$Common$compileErrors = function (xs) {
+	return A2(
+		$elm_community$dict_extra$Dict$Extra$fromListDedupe,
+		$elm$core$Basics$append,
+		A2(
+			$elm$core$List$map,
+			function (_v0) {
+				var k = _v0.a;
+				var a = _v0.b;
+				return _Utils_Tuple2(
+					k,
+					_List_fromArray(
+						[a]));
+			},
+			xs));
+};
+var $rtfeldman$elm_validate$Validate$Valid = function (a) {
+	return {$: 'Valid', a: a};
+};
+var $rtfeldman$elm_validate$Validate$validate = F2(
+	function (_v0, subject) {
+		var getErrors = _v0.a;
+		var _v1 = getErrors(subject);
+		if (!_v1.b) {
+			return $elm$core$Result$Ok(
+				$rtfeldman$elm_validate$Validate$Valid(subject));
+		} else {
+			var errors = _v1;
+			return $elm$core$Result$Err(errors);
+		}
+	});
+var $author$project$Auth$Common$validateErrorDict = F2(
+	function (validator, model) {
+		return A2(
+			$elm$core$Result$mapError,
+			$author$project$Auth$Common$compileErrors,
+			A2($rtfeldman$elm_validate$Validate$validate, validator, model));
+	});
+var $rtfeldman$elm_validate$Validate$ifTrue = F2(
+	function (test, error) {
+		var getErrors = function (subject) {
+			return test(subject) ? _List_fromArray(
+				[error]) : _List_Nil;
+		};
+		return $rtfeldman$elm_validate$Validate$Validator(getErrors);
+	});
+var $rtfeldman$elm_validate$Validate$isWhitespaceChar = function (_char) {
+	return _Utils_eq(
+		_char,
+		_Utils_chr(' ')) || (_Utils_eq(
+		_char,
+		_Utils_chr('\n')) || (_Utils_eq(
+		_char,
+		_Utils_chr('\t')) || _Utils_eq(
+		_char,
+		_Utils_chr('\u000D'))));
+};
+var $rtfeldman$elm_validate$Validate$isBlank = function (str) {
+	isBlank:
+	while (true) {
+		var _v0 = $elm$core$String$uncons(str);
+		if (_v0.$ === 'Just') {
+			var _v1 = _v0.a;
+			var _char = _v1.a;
+			var rest = _v1.b;
+			if ($rtfeldman$elm_validate$Validate$isWhitespaceChar(_char)) {
+				var $temp$str = rest;
+				str = $temp$str;
+				continue isBlank;
+			} else {
+				return false;
+			}
+		} else {
+			return true;
+		}
+	}
+};
+var $rtfeldman$elm_validate$Validate$ifBlank = F2(
+	function (subjectToString, error) {
+		return A2(
+			$rtfeldman$elm_validate$Validate$ifTrue,
+			function (subject) {
+				return $rtfeldman$elm_validate$Validate$isBlank(
+					subjectToString(subject));
+			},
+			error);
+	});
+var $author$project$Auth$Common$validatePassword = A2(
+	$rtfeldman$elm_validate$Validate$ifBlank,
+	function ($) {
+		return $.password;
+	},
+	_Utils_Tuple2('password', 'Please enter a password'));
+var $author$project$Auth$Common$validateUsername = A2(
+	$rtfeldman$elm_validate$Validate$ifBlank,
+	function ($) {
+		return $.username;
+	},
+	_Utils_Tuple2('username', 'Please enter a username.'));
+var $author$project$Auth$Internal$Login$validateLogin = $author$project$Auth$Common$validateErrorDict(
+	$rtfeldman$elm_validate$Validate$all(
+		_List_fromArray(
+			[$author$project$Auth$Common$validateUsername, $author$project$Auth$Common$validatePassword])));
+var $author$project$Auth$Auth$validateThenLogin = function (model) {
+	var _v0 = $author$project$Auth$Internal$Login$validateLogin(model);
+	if (_v0.$ === 'Ok') {
+		var validData = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$Login(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{password: model.password, requestStatus: $author$project$Internal$Helpers$Waiting, username: model.username}))),
+			A2($author$project$Auth$Internal$Login$login, validData, $author$project$Auth$Auth$LoginRequestResult),
+			$elm$core$Maybe$Nothing);
+	} else {
+		var errors = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$Login(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{showValidationErrors: true}))),
+			$elm$core$Platform$Cmd$none,
+			$elm$core$Maybe$Nothing);
+	}
+};
+var $author$project$Auth$Auth$toLogin = F3(
+	function (_v0, state, autoLogin) {
+		var newAuth = $author$project$Auth$Auth$Login(
+			$the_sett$elm_state_machines$StateMachine$State(state));
+		var result = autoLogin ? $author$project$Auth$Auth$validateThenLogin(state) : _Utils_Tuple3(newAuth, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
+		return result;
+	});
+var $author$project$Auth$Auth$toLogout = F3(
+	function (state, logoutModel, autoLogout) {
+		var newAuth = $author$project$Auth$Auth$Logout(
+			$the_sett$elm_state_machines$StateMachine$State(
+				_Utils_update(
+					logoutModel,
+					{
+						requestStatus: autoLogout ? $author$project$Internal$Helpers$Waiting : $author$project$Internal$Helpers$Initial
+					})));
+		return _Utils_Tuple3(
+			newAuth,
+			autoLogout ? $author$project$Auth$Internal$Logout$logout($author$project$Auth$Auth$LogoutRequestResult) : $elm$core$Platform$Cmd$none,
+			$elm$core$Maybe$Nothing);
+	});
+var $author$project$Auth$Auth$toPasswordReset = F2(
+	function (state, passwordResetModel) {
+		return $author$project$Auth$Auth$PasswordReset(
+			$the_sett$elm_state_machines$StateMachine$State(passwordResetModel));
+	});
+var $author$project$Auth$Auth$toSignup = F2(
+	function (state, signupModel) {
+		return $author$project$Auth$Auth$Signup(
+			$the_sett$elm_state_machines$StateMachine$State(signupModel));
+	});
+var $elm$core$Debug$toString = _Debug_toString;
+var $author$project$Auth$Internal$CodeVerification$RequestNewCode = {$: 'RequestNewCode'};
+var $author$project$Auth$Internal$CodeVerification$toogleInternalStatus = function (model) {
+	return _Utils_eq(model.internalStatus, $author$project$Auth$Internal$CodeVerification$CodeVerification) ? _Utils_update(
+		model,
+		{internalStatus: $author$project$Auth$Internal$CodeVerification$RequestNewCode}) : _Utils_update(
+		model,
+		{internalStatus: $author$project$Auth$Internal$CodeVerification$CodeVerification});
+};
+var $the_sett$elm_state_machines$StateMachine$untag = function (_v0) {
+	var x = _v0.a;
+	return x;
+};
+var $author$project$Auth$Auth$InitiatePasswordResetRequestResult = function (a) {
+	return {$: 'InitiatePasswordResetRequestResult', a: a};
+};
+var $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetEmailNotVerified = {$: 'InitiatePasswordResetEmailNotVerified'};
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetEmailNotVerified = A2($author$project$Auth$Common$decodeConstant, 'EMAIL NOT VERIFIED', $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetEmailNotVerified);
+var $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetInvalidEmail = {$: 'InitiatePasswordResetInvalidEmail'};
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetInvalidEmail = A2($author$project$Auth$Common$decodeConstant, 'INVALID EMAIL ADDRESS', $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetInvalidEmail);
+var $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetResetDisabled = {$: 'InitiatePasswordResetResetDisabled'};
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetResetDisabled = A2($author$project$Auth$Common$decodeConstant, 'PASSWORD RESET IS DISABLED', $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetResetDisabled);
+var $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetSuccess = {$: 'InitiatePasswordResetSuccess'};
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetSuccess = A2($author$project$Auth$Common$decodeConstant, 'INITIATE PASSWORD RESET SUCCESS', $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetSuccess);
+var $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetTooManyRequests = {$: 'InitiatePasswordResetTooManyRequests'};
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetTooManyRequests = A2($author$project$Auth$Common$decodeConstant, 'TOO MANY REQUESTS', $author$project$Auth$Internal$PasswordReset$InitiatePasswordResetTooManyRequests);
+var $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetInvalidEmail),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetEmailNotVerified),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetResetDisabled),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetTooManyRequests)
+		]));
+var $author$project$Auth$Internal$PasswordReset$initiatePasswordReset = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'email',
+						$elm$json$Json$Encode$string(model.email))
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$PasswordReset$decodeInitiatePasswordResetResult),
+				url: '/api/initiatePasswordReset'
+			});
+	});
+var $elm$regex$Regex$Match = F4(
+	function (match, index, number, submatches) {
+		return {index: index, match: match, number: number, submatches: submatches};
+	});
+var $elm$regex$Regex$contains = _Regex_contains;
+var $elm$regex$Regex$fromStringWith = _Regex_fromStringWith;
+var $elm$regex$Regex$never = _Regex_never;
+var $rtfeldman$elm_validate$Validate$validEmail = A2(
+	$elm$core$Maybe$withDefault,
+	$elm$regex$Regex$never,
+	A2(
+		$elm$regex$Regex$fromStringWith,
+		{caseInsensitive: true, multiline: false},
+		'^[a-zA-Z0-9.!#$%&\'*+\\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'));
+var $rtfeldman$elm_validate$Validate$isValidEmail = function (email) {
+	return A2($elm$regex$Regex$contains, $rtfeldman$elm_validate$Validate$validEmail, email);
+};
+var $rtfeldman$elm_validate$Validate$ifInvalidEmail = F2(
+	function (subjectToEmail, errorFromEmail) {
+		var getErrors = function (subject) {
+			var email = subjectToEmail(subject);
+			return $rtfeldman$elm_validate$Validate$isValidEmail(email) ? _List_Nil : _List_fromArray(
+				[
+					errorFromEmail(email)
+				]);
+		};
+		return $rtfeldman$elm_validate$Validate$Validator(getErrors);
+	});
+var $author$project$Auth$Common$validateEmail = $rtfeldman$elm_validate$Validate$all(
+	_List_fromArray(
+		[
+			A2(
+			$rtfeldman$elm_validate$Validate$ifBlank,
+			function ($) {
+				return $.email;
+			},
+			_Utils_Tuple2('email', 'Please enter an email')),
+			A2(
+			$rtfeldman$elm_validate$Validate$ifInvalidEmail,
+			function ($) {
+				return $.email;
+			},
+			function (e) {
+				return _Utils_Tuple2('email', 'Invalid email: ' + e);
+			})
+		]));
+var $author$project$Auth$Auth$validateThenInitiatePasswordReset = function (model) {
+	var _v0 = A2($author$project$Auth$Common$validateErrorDict, $author$project$Auth$Common$validateEmail, model);
+	if (_v0.$ === 'Ok') {
+		var validData = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$PasswordReset(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{
+							passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Waiting)
+						}))),
+			A2($author$project$Auth$Internal$PasswordReset$initiatePasswordReset, validData, $author$project$Auth$Auth$InitiatePasswordResetRequestResult),
+			$elm$core$Maybe$Nothing);
+	} else {
+		var errors = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$PasswordReset(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{showValidationErrors: true}))),
+			$elm$core$Platform$Cmd$none,
+			$elm$core$Maybe$Nothing);
+	}
+};
+var $author$project$Auth$Auth$NewCodeResult = function (a) {
+	return {$: 'NewCodeResult', a: a};
+};
+var $author$project$Auth$Internal$CodeVerification$NewCodeNoPreviousAttempt = {$: 'NewCodeNoPreviousAttempt'};
+var $author$project$Auth$Internal$CodeVerification$decodeNewCodeNoPreviousAttempt = A2($author$project$Auth$Common$decodeConstant, 'RESEND CODE NO PREVIOUS ATTEMPT', $author$project$Auth$Internal$CodeVerification$NewCodeNoPreviousAttempt);
+var $author$project$Auth$Internal$CodeVerification$NewCodeSuccess = {$: 'NewCodeSuccess'};
+var $author$project$Auth$Internal$CodeVerification$decodeNewCodeSuccess = A2($author$project$Auth$Common$decodeConstant, 'RESEND CODE VERIFICATION SUCCESS', $author$project$Auth$Internal$CodeVerification$NewCodeSuccess);
+var $author$project$Auth$Internal$CodeVerification$NewCodeTooManyAttemps = {$: 'NewCodeTooManyAttemps'};
+var $author$project$Auth$Internal$CodeVerification$decodeNewCodeTooManyAttemps = A2($author$project$Auth$Common$decodeConstant, 'RESEND CODE TOO MANY ATTEMPS', $author$project$Auth$Internal$CodeVerification$NewCodeTooManyAttemps);
+var $author$project$Auth$Internal$CodeVerification$decodeNewCodeResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$CodeVerification$decodeNewCodeSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeNewCodeTooManyAttemps),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeNewCodeNoPreviousAttempt)
+		]));
+var $author$project$Auth$Internal$CodeVerification$newCode = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'email',
+						$elm$json$Json$Encode$string(model.email))
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$CodeVerification$decodeNewCodeResult),
+				url: 'api/newCode'
+			});
+	});
+var $author$project$Auth$Auth$validateThenNewCode = F2(
+	function (onVerified, _v0) {
+		var model = _v0.a;
+		var _v1 = A2($author$project$Auth$Common$validateErrorDict, $author$project$Auth$Common$validateEmail, model);
+		if (_v1.$ === 'Ok') {
+			var validData = _v1.a;
+			return _Utils_Tuple3(
+				A2(
+					$author$project$Auth$Auth$CodeVerification,
+					onVerified,
+					$the_sett$elm_state_machines$StateMachine$State(
+						_Utils_update(
+							model,
+							{newCodeRequestStatus: $author$project$Internal$Helpers$Waiting}))),
+				A2($author$project$Auth$Internal$CodeVerification$newCode, validData, $author$project$Auth$Auth$NewCodeResult),
+				$elm$core$Maybe$Nothing);
+		} else {
+			var errors = _v1.a;
+			return _Utils_Tuple3(
+				A2(
+					$author$project$Auth$Auth$CodeVerification,
+					onVerified,
+					$the_sett$elm_state_machines$StateMachine$State(
+						_Utils_update(
+							model,
+							{showValidationErrors: true}))),
+				$elm$core$Platform$Cmd$none,
+				$elm$core$Maybe$Nothing);
+		}
+	});
+var $author$project$Auth$Auth$SignupRequestResult = function (a) {
+	return {$: 'SignupRequestResult', a: a};
+};
+var $author$project$Auth$Internal$Signup$SignupInvalidEmail = {$: 'SignupInvalidEmail'};
+var $author$project$Auth$Internal$Signup$decodeSignupInvalidEmail = A2($author$project$Auth$Common$decodeConstant, 'INVALID EMAIL ADDRESS', $author$project$Auth$Internal$Signup$SignupInvalidEmail);
+var $author$project$Auth$Internal$Signup$SignupInvalidPassword = {$: 'SignupInvalidPassword'};
+var $author$project$Auth$Internal$Signup$decodeSignupInvalidPassword = A2($author$project$Auth$Common$decodeConstant, 'INVALID PASSWORD', $author$project$Auth$Internal$Signup$SignupInvalidPassword);
+var $author$project$Auth$Internal$Signup$SignupSuccess = {$: 'SignupSuccess'};
+var $author$project$Auth$Internal$Signup$decodeSignupSuccess = A2($author$project$Auth$Common$decodeConstant, 'SIGNUP SUCCESSFUL', $author$project$Auth$Internal$Signup$SignupSuccess);
+var $author$project$Auth$Internal$Signup$SignupTooManyRequests = {$: 'SignupTooManyRequests'};
+var $author$project$Auth$Internal$Signup$decodeSignupTooManyRequests = A2($author$project$Auth$Common$decodeConstant, 'TOO MANY REQUESTS', $author$project$Auth$Internal$Signup$SignupTooManyRequests);
+var $author$project$Auth$Internal$Signup$SignupUserAlreadyExists = {$: 'SignupUserAlreadyExists'};
+var $author$project$Auth$Internal$Signup$decodeSignupUserAlreadyExists = A2($author$project$Auth$Common$decodeConstant, 'USER ALREADY EXISTS', $author$project$Auth$Internal$Signup$SignupUserAlreadyExists);
+var $author$project$Auth$Internal$Signup$decodeSignupResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$Signup$decodeSignupSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Signup$decodeSignupInvalidEmail),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Signup$decodeSignupUserAlreadyExists),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Signup$decodeSignupTooManyRequests),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$Signup$decodeSignupInvalidPassword)
+		]));
+var $author$project$Auth$Internal$Signup$signup = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'username',
+						$elm$json$Json$Encode$string(model.username)),
+						_Utils_Tuple2(
+						'password',
+						$elm$json$Json$Encode$string(model.password)),
+						_Utils_Tuple2(
+						'email',
+						$elm$json$Json$Encode$string(model.email))
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$Signup$decodeSignupResult),
+				url: '/api/signup'
+			});
+	});
+var $rtfeldman$elm_validate$Validate$ifFalse = F2(
+	function (test, error) {
+		var getErrors = function (subject) {
+			return test(subject) ? _List_Nil : _List_fromArray(
+				[error]);
+		};
+		return $rtfeldman$elm_validate$Validate$Validator(getErrors);
+	});
+var $author$project$Auth$Common$validateConfirmPasword = A2(
+	$rtfeldman$elm_validate$Validate$ifBlank,
+	function ($) {
+		return $.confirmPassword;
+	},
+	_Utils_Tuple2('confirmPassword', 'Please confirm your password'));
+var $author$project$Auth$Internal$Signup$validateSignup = $author$project$Auth$Common$validateErrorDict(
+	$rtfeldman$elm_validate$Validate$all(
+		_List_fromArray(
+			[
+				$author$project$Auth$Common$validateUsername,
+				$author$project$Auth$Common$validatePassword,
+				$author$project$Auth$Common$validateConfirmPasword,
+				A2(
+				$rtfeldman$elm_validate$Validate$ifFalse,
+				function (m) {
+					return _Utils_eq(m.password, m.confirmPassword);
+				},
+				_Utils_Tuple2('confirmPassword', 'Passwords are not matching')),
+				$author$project$Auth$Common$validateEmail
+			])));
+var $author$project$Auth$Auth$validateThenSignup = function (_v0) {
+	var data = _v0.a;
+	var _v1 = $author$project$Auth$Internal$Signup$validateSignup(data);
+	if (_v1.$ === 'Ok') {
+		var validData = _v1.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$Signup(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						data,
+						{requestStatus: $author$project$Internal$Helpers$Waiting}))),
+			A2($author$project$Auth$Internal$Signup$signup, validData, $author$project$Auth$Auth$SignupRequestResult),
+			$elm$core$Maybe$Nothing);
+	} else {
+		var errors = _v1.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$Signup(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						data,
+						{showValidationErrors: true}))),
+			$elm$core$Platform$Cmd$none,
+			$elm$core$Maybe$Nothing);
+	}
+};
+var $author$project$Auth$Auth$UpdatePasswordRequestResult = function (a) {
+	return {$: 'UpdatePasswordRequestResult', a: a};
+};
+var $author$project$Auth$Internal$PasswordReset$UpdateInitiatePasswordResetDisabled = {$: 'UpdateInitiatePasswordResetDisabled'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdateInitiatePasswordResetDisabled = A2($author$project$Auth$Common$decodeConstant, 'PASSWORD RESET IS DISABLED', $author$project$Auth$Internal$PasswordReset$UpdateInitiatePasswordResetDisabled);
+var $author$project$Auth$Internal$PasswordReset$UpdatePasswordInvalidPassword = {$: 'UpdatePasswordInvalidPassword'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordInvalidPassword = A2($author$project$Auth$Common$decodeConstant, 'INVALID PASSWORD', $author$project$Auth$Internal$PasswordReset$UpdatePasswordInvalidPassword);
+var $author$project$Auth$Internal$PasswordReset$UpdatePasswordInvalidSelectorTokenPair = {$: 'UpdatePasswordInvalidSelectorTokenPair'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordInvalidSelectorTokenPair = A2($author$project$Auth$Common$decodeConstant, 'INVALID TOKEN', $author$project$Auth$Internal$PasswordReset$UpdatePasswordInvalidSelectorTokenPair);
+var $author$project$Auth$Internal$PasswordReset$UpdatePasswordSuccess = {$: 'UpdatePasswordSuccess'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordSuccess = A2($author$project$Auth$Common$decodeConstant, 'PASSWORD UPDATE SUCCESS', $author$project$Auth$Internal$PasswordReset$UpdatePasswordSuccess);
+var $author$project$Auth$Internal$PasswordReset$UpdatePasswordTokenExpired = {$: 'UpdatePasswordTokenExpired'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordTokenExpired = A2($author$project$Auth$Common$decodeConstant, 'TOKEN EXPIRED', $author$project$Auth$Internal$PasswordReset$UpdatePasswordTokenExpired);
+var $author$project$Auth$Internal$PasswordReset$UpdatePasswordTooManyRequests = {$: 'UpdatePasswordTooManyRequests'};
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordTooManyRequests = A2($author$project$Auth$Common$decodeConstant, 'TOO MANY REQUESTS', $author$project$Auth$Internal$PasswordReset$UpdatePasswordTooManyRequests);
+var $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordInvalidSelectorTokenPair),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordTokenExpired),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeUpdateInitiatePasswordResetDisabled),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordInvalidPassword),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordTooManyRequests)
+		]));
+var $author$project$Auth$Internal$PasswordReset$updatePassword = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'password',
+						$elm$json$Json$Encode$string(model.password)),
+						_Utils_Tuple2('payload', model.encryptedSelectorAndToken)
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$PasswordReset$decodeUpdatePasswordResult),
+				url: '/api/updatePassword'
+			});
+	});
+var $author$project$Auth$Auth$validateThenUpdatePassword = function (model) {
+	var _v0 = A2(
+		$author$project$Auth$Common$validateErrorDict,
+		$rtfeldman$elm_validate$Validate$all(
+			_List_fromArray(
+				[$author$project$Auth$Common$validatePassword, $author$project$Auth$Common$validateConfirmPasword])),
+		model);
+	if (_v0.$ === 'Ok') {
+		var validData = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$PasswordReset(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{
+							passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Waiting)
+						}))),
+			A2($author$project$Auth$Internal$PasswordReset$updatePassword, validData, $author$project$Auth$Auth$UpdatePasswordRequestResult),
+			$elm$core$Maybe$Nothing);
+	} else {
+		var errors = _v0.a;
+		return _Utils_Tuple3(
+			$author$project$Auth$Auth$PasswordReset(
+				$the_sett$elm_state_machines$StateMachine$State(
+					_Utils_update(
+						model,
+						{showValidationErrors: true}))),
+			$elm$core$Platform$Cmd$none,
+			$elm$core$Maybe$Nothing);
+	}
+};
+var $author$project$Auth$Auth$CodeVerificationRequestResult = function (a) {
+	return {$: 'CodeVerificationRequestResult', a: a};
+};
+var $author$project$Auth$Internal$CodeVerification$validateCodeVerification = $author$project$Auth$Common$validateErrorDict(
+	$rtfeldman$elm_validate$Validate$all(
+		_List_fromArray(
+			[
+				A2(
+				$rtfeldman$elm_validate$Validate$ifFalse,
+				function (m) {
+					var _v0 = $elm$core$String$toInt(m.code);
+					if (_v0.$ === 'Just') {
+						var n = _v0.a;
+						return (n >= 0) && (n <= 999999);
+					} else {
+						return false;
+					}
+				},
+				_Utils_Tuple2('code', 'The code is invalid')),
+				A2(
+				$rtfeldman$elm_validate$Validate$ifTrue,
+				function (m) {
+					return _Utils_eq(m.requestStatus, $author$project$Internal$Helpers$Waiting) || _Utils_eq(m.requestStatus, $author$project$Internal$Helpers$Success);
+				},
+				_Utils_Tuple2('admin', 'Can\'t verify code now')),
+				$author$project$Auth$Common$validateEmail
+			])));
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationFailure = {$: 'CodeVerificationFailure'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationFailure = A2($author$project$Auth$Common$decodeConstant, 'CODE VERIFICATION FAILURE', $author$project$Auth$Internal$CodeVerification$CodeVerificationFailure);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationTooManyAttempts = {$: 'CodeVerificationTooManyAttempts'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTooManyAttempts = A2($author$project$Auth$Common$decodeConstant, 'CODE VERIFICATION TOO MANY ATTEMPTS', $author$project$Auth$Internal$CodeVerification$CodeVerificationTooManyAttempts);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationSuccess = function (a) {
+	return {$: 'CodeVerificationSuccess', a: a};
+};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationWithPayloadSuccess = A2(
+	$elm$json$Json$Decode$map,
+	$author$project$Auth$Internal$CodeVerification$CodeVerificationSuccess,
+	A2($elm$json$Json$Decode$field, 'codeVerificationPayload', $elm$json$Json$Decode$value));
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationResult = $elm$json$Json$Decode$oneOf(
+	_List_fromArray(
+		[
+			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationWithPayloadSuccess),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationFailure),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTooManyAttempts)
+		]));
+var $elm$json$Json$Encode$int = _Json_wrap;
+var $author$project$Auth$Internal$CodeVerification$verifyCode = F2(
+	function (validData, handler) {
+		var model = $rtfeldman$elm_validate$Validate$fromValid(validData);
+		var body = $elm$http$Http$jsonBody(
+			$elm$json$Json$Encode$object(
+				_List_fromArray(
+					[
+						_Utils_Tuple2(
+						'code',
+						$elm$json$Json$Encode$int(
+							A2(
+								$elm$core$Maybe$withDefault,
+								0,
+								$elm$core$String$toInt(model.code)))),
+						_Utils_Tuple2(
+						'email',
+						$elm$json$Json$Encode$string(model.email))
+					])));
+		return $elm$http$Http$post(
+			{
+				body: body,
+				expect: A2($elm$http$Http$expectJson, handler, $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationResult),
+				url: model.verificationEndpoint
+			});
+	});
+var $author$project$Auth$Auth$validateThenVerifyCode = F2(
+	function (onVerified, _v0) {
+		var model = _v0.a;
+		var _v1 = $author$project$Auth$Internal$CodeVerification$validateCodeVerification(model);
+		if (_v1.$ === 'Ok') {
+			var validData = _v1.a;
+			return _Utils_Tuple3(
+				A2(
+					$author$project$Auth$Auth$CodeVerification,
+					onVerified,
+					$the_sett$elm_state_machines$StateMachine$State(
+						_Utils_update(
+							model,
+							{requestStatus: $author$project$Internal$Helpers$Waiting}))),
+				A2($author$project$Auth$Internal$CodeVerification$verifyCode, validData, $author$project$Auth$Auth$CodeVerificationRequestResult),
+				$elm$core$Maybe$Nothing);
+		} else {
+			var errors = _v1.a;
+			return _Utils_Tuple3(
+				A2(
+					$author$project$Auth$Auth$CodeVerification,
+					onVerified,
+					$the_sett$elm_state_machines$StateMachine$State(
+						_Utils_update(
+							model,
+							{showValidationErrors: true}))),
+				$elm$core$Platform$Cmd$none,
+				$elm$core$Maybe$Nothing);
+		}
+	});
+var $author$project$Auth$Auth$update = F3(
+	function (config, msg, auth) {
+		var _v0 = _Utils_Tuple2(auth, msg);
+		_v0$33:
+		while (true) {
+			switch (_v0.b.$) {
+				case 'SetUsername':
+					var name = _v0.b.a;
+					return _Utils_Tuple3(
+						A2($author$project$Auth$Auth$setUsername, auth, name),
+						$elm$core$Platform$Cmd$none,
+						$elm$core$Maybe$Nothing);
+				case 'SetPassword':
+					var password = _v0.b.a;
+					return _Utils_Tuple3(
+						A2($author$project$Auth$Auth$setPassword, auth, password),
+						$elm$core$Platform$Cmd$none,
+						$elm$core$Maybe$Nothing);
+				case 'SetConfirmPassword':
+					var password = _v0.b.a;
+					return _Utils_Tuple3(
+						A2($author$project$Auth$Auth$setConfirmPassword, auth, password),
+						$elm$core$Platform$Cmd$none,
+						$elm$core$Maybe$Nothing);
+				case 'SetEmail':
+					var email = _v0.b.a;
+					return _Utils_Tuple3(
+						A2($author$project$Auth$Auth$setEmail, auth, email),
+						$elm$core$Platform$Cmd$none,
+						$elm$core$Maybe$Nothing);
+				case 'LoginRequest':
+					if (_v0.a.$ === 'Login') {
+						var state = _v0.a.a;
+						var _v1 = _v0.b;
+						var _v2 = $author$project$Auth$Auth$validateThenLogin(
+							$the_sett$elm_state_machines$StateMachine$untag(state));
+						var newAuth = _v2.a;
+						var cmd = _v2.b;
+						var result = _v2.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'LoginRequestResult':
+					if (_v0.a.$ === 'Login') {
+						var state = _v0.a.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'LoginSuccess':
+									var userProfile = res.a.a;
+									return _Utils_Tuple3(
+										A2($author$project$Auth$Auth$toLoggedState, state, userProfile),
+										$elm$core$Platform$Cmd$none,
+										$elm$core$Maybe$Nothing);
+								case 'LoginUnknownUsername':
+									var _v4 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Login(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Login error: Unknown username'}),
+										$elm$core$Maybe$Nothing);
+								case 'LoginWrongCredentials':
+									var _v5 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Login(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Login error: wrong credentials'}),
+										$elm$core$Maybe$Nothing);
+								case 'LoginTooManyRequests':
+									var _v6 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Login(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Login error: too many requests'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v7 = res.a;
+									return _Utils_Tuple3(
+										A3(
+											$author$project$Auth$Auth$toCodeVerification,
+											state,
+											$elm$core$Basics$always(
+												A2(
+													$author$project$Auth$Auth$ToLogin,
+													_Utils_update(
+														$author$project$Auth$Internal$Login$initLogin,
+														{
+															password: $the_sett$elm_state_machines$StateMachine$untag(state).password,
+															username: $the_sett$elm_state_machines$StateMachine$untag(state).username
+														}),
+													true)),
+											_Utils_update(
+												$author$project$Auth$Internal$CodeVerification$initCodeVerificationModel,
+												{askForEmail: true, verificationEndpoint: '/api/verifyEmail', verificationNotice: 'You need to verify your email address'})),
+										$elm$core$Platform$Cmd$none,
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								$author$project$Auth$Auth$Login(
+									A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Login error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'InitiatePasswordResetRequest':
+					if (_v0.a.$ === 'PasswordReset') {
+						var state = _v0.a.a;
+						var _v10 = _v0.b;
+						var _v11 = $author$project$Auth$Auth$validateThenInitiatePasswordReset(
+							$the_sett$elm_state_machines$StateMachine$untag(state));
+						var newAuth = _v11.a;
+						var cmd = _v11.b;
+						var result = _v11.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'InitiatePasswordResetRequestResult':
+					if (_v0.a.$ === 'PasswordReset') {
+						var model = _v0.a.a.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'InitiatePasswordResetSuccess':
+									var _v13 = res.a;
+									return _Utils_Tuple3(
+										A3(
+											$author$project$Auth$Auth$toCodeVerification,
+											$the_sett$elm_state_machines$StateMachine$State(model),
+											function (payload) {
+												return $author$project$Auth$Auth$ToPasswordReset(
+													_Utils_update(
+														model,
+														{
+															encryptedSelectorAndToken: payload,
+															passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Initial)
+														}));
+											},
+											_Utils_update(
+												$author$project$Auth$Internal$CodeVerification$initCodeVerificationModel,
+												{email: model.email, verificationEndpoint: '/api/verifyEmailForPasswordReset', verificationNotice: 'You need to verify your email address'})),
+										$elm$core$Platform$Cmd$none,
+										$elm$core$Maybe$Nothing);
+								case 'InitiatePasswordResetInvalidEmail':
+									var _v14 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: invalid email'}),
+										$elm$core$Maybe$Nothing);
+								case 'InitiatePasswordResetEmailNotVerified':
+									var _v15 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: email not verified'}),
+										$elm$core$Maybe$Nothing);
+								case 'InitiatePasswordResetResetDisabled':
+									var _v16 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: reset disabled'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v17 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: too many requests'}),
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								$author$project$Auth$Auth$PasswordReset(
+									$the_sett$elm_state_machines$StateMachine$State(
+										_Utils_update(
+											model,
+											{
+												passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+											}))),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Password reset error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'UpdatePasswordRequest':
+					if (_v0.a.$ === 'PasswordReset') {
+						var state = _v0.a.a;
+						var _v18 = _v0.b;
+						var _v19 = $author$project$Auth$Auth$validateThenUpdatePassword(
+							$the_sett$elm_state_machines$StateMachine$untag(state));
+						var newAuth = _v19.a;
+						var cmd = _v19.b;
+						var result = _v19.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'UpdatePasswordRequestResult':
+					if (_v0.a.$ === 'PasswordReset') {
+						var model = _v0.a.a.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'UpdatePasswordSuccess':
+									var _v21 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Success)
+													}))),
+										$elm$core$Platform$Cmd$none,
+										$elm$core$Maybe$Nothing);
+								case 'UpdatePasswordInvalidSelectorTokenPair':
+									var _v22 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: invalid selector token pair '}),
+										$elm$core$Maybe$Nothing);
+								case 'UpdatePasswordTokenExpired':
+									var _v23 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: token expired'}),
+										$elm$core$Maybe$Nothing);
+								case 'UpdateInitiatePasswordResetDisabled':
+									var _v24 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: password reset disabled'}),
+										$elm$core$Maybe$Nothing);
+								case 'UpdatePasswordInvalidPassword':
+									var _v25 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: invalid password'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v26 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$PasswordReset(
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Password reset error: too many requests'}),
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								$author$project$Auth$Auth$PasswordReset(
+									$the_sett$elm_state_machines$StateMachine$State(
+										_Utils_update(
+											model,
+											{
+												passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
+											}))),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Password reset error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'SetVerificationCode':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v29 = _v0.a;
+						var onVerified = _v29.a;
+						var state = _v29.b;
+						var code = _v0.b.a;
+						return _Utils_Tuple3(
+							A2(
+								$author$project$Auth$Auth$CodeVerification,
+								onVerified,
+								A2(
+									$the_sett$elm_state_machines$StateMachine$map,
+									function (m) {
+										return _Utils_update(
+											m,
+											{code: code});
+									},
+									state)),
+							$elm$core$Platform$Cmd$none,
+							$elm$core$Maybe$Nothing);
+					} else {
+						break _v0$33;
+					}
+				case 'CodeVerificationRequest':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v30 = _v0.a;
+						var onVerified = _v30.a;
+						var state = _v30.b;
+						var _v31 = _v0.b;
+						var _v32 = A2($author$project$Auth$Auth$validateThenVerifyCode, onVerified, state);
+						var newAuth = _v32.a;
+						var cmd = _v32.b;
+						var result = _v32.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'CodeVerificationRequestResult':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v33 = _v0.a;
+						var onVerified = _v33.a;
+						var state = _v33.b;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'CodeVerificationSuccess':
+									var payload = res.a.a;
+									var _v35 = A3(
+										$author$project$Auth$Auth$update,
+										config,
+										onVerified(payload),
+										auth);
+									var newAuth = _v35.a;
+									var cmd = _v35.b;
+									var result = _v35.c;
+									return _Utils_Tuple3(newAuth, cmd, result);
+								case 'CodeVerificationFailure':
+									var _v36 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification failure'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v37 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification failure: too many attempts'}),
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								A2(
+									$author$project$Auth$Auth$CodeVerification,
+									onVerified,
+									A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Code verification error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'CodeVerificationToogleInternalStatus':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v38 = _v0.a;
+						var onVerified = _v38.a;
+						var state = _v38.b;
+						var _v39 = _v0.b;
+						return _Utils_Tuple3(
+							A2(
+								$author$project$Auth$Auth$CodeVerification,
+								onVerified,
+								$the_sett$elm_state_machines$StateMachine$State(
+									$author$project$Auth$Internal$CodeVerification$toogleInternalStatus(
+										$the_sett$elm_state_machines$StateMachine$untag(state)))),
+							$elm$core$Platform$Cmd$none,
+							$elm$core$Maybe$Nothing);
+					} else {
+						break _v0$33;
+					}
+				case 'ToCodeVerification':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v43 = _v0.a;
+						var onVerified = _v43.a;
+						var state = _v43.b;
+						var codeVerificationModel = _v0.b.a;
+						return _Utils_Tuple3(
+							A3($author$project$Auth$Auth$toCodeVerification, state, onVerified, codeVerificationModel),
+							$elm$core$Platform$Cmd$none,
+							$elm$core$Maybe$Nothing);
+					} else {
+						break _v0$33;
+					}
+				case 'ToPasswordReset':
+					switch (_v0.a.$) {
+						case 'Login':
+							var state = _v0.a.a;
+							var passwordResetModel = _v0.b.a;
+							return _Utils_Tuple3(
+								A2($author$project$Auth$Auth$toPasswordReset, state, passwordResetModel),
+								$elm$core$Platform$Cmd$none,
+								$elm$core$Maybe$Nothing);
+						case 'CodeVerification':
+							var _v44 = _v0.a;
+							var onVerified = _v44.a;
+							var state = _v44.b;
+							var passwordResetModel = _v0.b.a;
+							return _Utils_Tuple3(
+								A2($author$project$Auth$Auth$toPasswordReset, state, passwordResetModel),
+								$elm$core$Platform$Cmd$none,
+								$elm$core$Maybe$Nothing);
+						default:
+							break _v0$33;
+					}
+				case 'NewCodeRequest':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v45 = _v0.a;
+						var onVerified = _v45.a;
+						var state = _v45.b;
+						var _v46 = _v0.b;
+						var _v47 = A2($author$project$Auth$Auth$validateThenNewCode, onVerified, state);
+						var newAuth = _v47.a;
+						var cmd = _v47.b;
+						var result = _v47.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'NewCodeResult':
+					if (_v0.a.$ === 'CodeVerification') {
+						var _v48 = _v0.a;
+						var onVerified = _v48.a;
+						var model = _v48.b.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'NewCodeSuccess':
+									var _v50 = res.a;
+									var newAuth = A2(
+										$author$project$Auth$Auth$CodeVerification,
+										onVerified,
+										$the_sett$elm_state_machines$StateMachine$State(
+											_Utils_update(
+												model,
+												{newCodeRequestStatus: $author$project$Internal$Helpers$Success})));
+									return _Utils_Tuple3(newAuth, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
+								case 'NewCodeTooManyAttemps':
+									var _v51 = res.a;
+									var newAuth = A2(
+										$author$project$Auth$Auth$CodeVerification,
+										onVerified,
+										$the_sett$elm_state_machines$StateMachine$State(
+											_Utils_update(
+												model,
+												{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+									return _Utils_Tuple3(
+										newAuth,
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: false, logMsg: 'Code verification error: too many attempts'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v52 = res.a;
+									var newAuth = A2(
+										$author$project$Auth$Auth$CodeVerification,
+										onVerified,
+										$the_sett$elm_state_machines$StateMachine$State(
+											_Utils_update(
+												model,
+												{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+									return _Utils_Tuple3(
+										newAuth,
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: false, logMsg: 'Code verification error: No previous attempt'}),
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							var newAuth = A2(
+								$author$project$Auth$Auth$CodeVerification,
+								onVerified,
+								$the_sett$elm_state_machines$StateMachine$State(
+									_Utils_update(
+										model,
+										{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+							return _Utils_Tuple3(
+								newAuth,
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Code verification error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'ToSignup':
+					switch (_v0.a.$) {
+						case 'Login':
+							var state = _v0.a.a;
+							var signupModel = _v0.b.a;
+							return _Utils_Tuple3(
+								A2($author$project$Auth$Auth$toSignup, state, signupModel),
+								$elm$core$Platform$Cmd$none,
+								$elm$core$Maybe$Nothing);
+						case 'Signup':
+							var state = _v0.a.a;
+							var signupModel = _v0.b.a;
+							return _Utils_Tuple3(
+								A2($author$project$Auth$Auth$toSignup, state, signupModel),
+								$elm$core$Platform$Cmd$none,
+								$elm$core$Maybe$Nothing);
+						default:
+							break _v0$33;
+					}
+				case 'SignupRequest':
+					if (_v0.a.$ === 'Signup') {
+						var state = _v0.a.a;
+						var _v55 = _v0.b;
+						var _v56 = $author$project$Auth$Auth$validateThenSignup(state);
+						var newAuth = _v56.a;
+						var cmd = _v56.b;
+						var result = _v56.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'SignupRequestResult':
+					if (_v0.a.$ === 'Signup') {
+						var state = _v0.a.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							switch (res.a.$) {
+								case 'SignupSuccess':
+									var _v58 = res.a;
+									return _Utils_Tuple3(
+										A3(
+											$author$project$Auth$Auth$toCodeVerification,
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Success),
+											$elm$core$Basics$always(
+												A2(
+													$author$project$Auth$Auth$ToLogin,
+													_Utils_update(
+														$author$project$Auth$Internal$Login$initLogin,
+														{
+															password: $the_sett$elm_state_machines$StateMachine$untag(state).password,
+															username: $the_sett$elm_state_machines$StateMachine$untag(state).username
+														}),
+													true)),
+											_Utils_update(
+												$author$project$Auth$Internal$CodeVerification$initCodeVerificationModel,
+												{
+													email: $the_sett$elm_state_machines$StateMachine$untag(state).email,
+													verificationEndpoint: '/api/verifyEmail',
+													verificationNotice: 'You need to verify your email address'
+												})),
+										$elm$core$Platform$Cmd$none,
+										$elm$core$Maybe$Nothing);
+								case 'SignupInvalidEmail':
+									var _v59 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Signup(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: invalid email'}),
+										$elm$core$Maybe$Nothing);
+								case 'SignupUserAlreadyExists':
+									var _v60 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Signup(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: user already exists'}),
+										$elm$core$Maybe$Nothing);
+								case 'SignupTooManyRequests':
+									var _v61 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Signup(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: too many requests'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v62 = res.a;
+									return _Utils_Tuple3(
+										$author$project$Auth$Auth$Signup(
+											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: invalid password'}),
+										$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								$author$project$Auth$Auth$Signup(
+									A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Signup error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'ToLogout':
+					if (_v0.a.$ === 'AdminControlPanel') {
+						var state = _v0.a.a;
+						var logoutModel = _v0.b.a;
+						var _v63 = A3($author$project$Auth$Auth$toLogout, state, logoutModel, true);
+						var newAuth = _v63.a;
+						var cmd = _v63.b;
+						var result = _v63.c;
+						return _Utils_Tuple3(
+							newAuth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+							result);
+					} else {
+						break _v0$33;
+					}
+				case 'LogoutRequest':
+					if (_v0.a.$ === 'Logout') {
+						var state = _v0.a.a;
+						var _v64 = _v0.b;
+						return _Utils_Tuple3(
+							auth,
+							A2(
+								$elm$core$Platform$Cmd$map,
+								config.outMsg,
+								$author$project$Auth$Internal$Logout$logout($author$project$Auth$Auth$LogoutRequestResult)),
+							$elm$core$Maybe$Nothing);
+					} else {
+						break _v0$33;
+					}
+				case 'LogoutRequestResult':
+					if (_v0.a.$ === 'Logout') {
+						var state = _v0.a.a;
+						var res = _v0.b.a;
+						if (res.$ === 'Ok') {
+							if (res.a.$ === 'LogoutSuccess') {
+								var _v66 = res.a;
+								return _Utils_Tuple3(
+									$author$project$Auth$Auth$Logout(
+										A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Success)),
+									$elm$core$Platform$Cmd$none,
+									$elm$core$Maybe$Nothing);
+							} else {
+								var _v67 = res.a;
+								return _Utils_Tuple3(
+									$author$project$Auth$Auth$Logout(
+										A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+									$elm$core$Platform$Cmd$none,
+									$elm$core$Maybe$Nothing);
+							}
+						} else {
+							var httpError = res.a;
+							return _Utils_Tuple3(
+								$author$project$Auth$Auth$Logout(
+									A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+								A2(
+									$author$project$Internal$Logger$newLogR,
+									config,
+									{
+										details: $elm$core$Maybe$Just(
+											$author$project$Internal$Helpers$httpErrorToString(httpError)),
+										isError: true,
+										isImportant: false,
+										logMsg: 'Logout error: network or system error'
+									}),
+								$elm$core$Maybe$Nothing);
+						}
+					} else {
+						break _v0$33;
+					}
+				case 'ToLogin':
+					switch (_v0.a.$) {
+						case 'Login':
+							var state = _v0.a.a;
+							var _v8 = _v0.b;
+							var loginModel = _v8.a;
+							var autoLogin = _v8.b;
+							var _v9 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v9.a;
+							var cmd = _v9.b;
+							var result = _v9.c;
+							return _Utils_Tuple3(
+								newAuth,
+								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+								result);
+						case 'PasswordReset':
+							var state = _v0.a.a;
+							var _v27 = _v0.b;
+							var loginModel = _v27.a;
+							var autoLogin = _v27.b;
+							var _v28 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v28.a;
+							var cmd = _v28.b;
+							var result = _v28.c;
+							return _Utils_Tuple3(
+								newAuth,
+								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+								result);
+						case 'CodeVerification':
+							var _v40 = _v0.a;
+							var onVerified = _v40.a;
+							var state = _v40.b;
+							var _v41 = _v0.b;
+							var loginModel = _v41.a;
+							var autoLogin = _v41.b;
+							var _v42 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v42.a;
+							var cmd = _v42.b;
+							var result = _v42.c;
+							return _Utils_Tuple3(
+								newAuth,
+								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+								result);
+						case 'Signup':
+							var state = _v0.a.a;
+							var _v53 = _v0.b;
+							var loginModel = _v53.a;
+							var autoLogin = _v53.b;
+							var _v54 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v54.a;
+							var cmd = _v54.b;
+							var result = _v54.c;
+							return _Utils_Tuple3(
+								newAuth,
+								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+								result);
+						case 'Logout':
+							var state = _v0.a.a;
+							var _v68 = _v0.b;
+							var loginModel = _v68.a;
+							var autoLogin = _v68.b;
+							var _v69 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v69.a;
+							var cmd = _v69.b;
+							var result = _v69.c;
+							return _Utils_Tuple3(
+								newAuth,
+								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
+								result);
+						default:
+							break _v0$33;
+					}
+				case 'Refresh':
+					var _v70 = _v0.b;
+					var _v71 = $author$project$Auth$Auth$getLogInfo(auth);
+					if (_v71.$ === 'LoggedIn') {
+						return _Utils_Tuple3(
+							auth,
+							A2($elm$core$Platform$Cmd$map, config.outMsg, $author$project$Auth$Auth$refresh),
+							$elm$core$Maybe$Nothing);
+					} else {
+						return _Utils_Tuple3(
+							A2($author$project$Auth$Auth$initAuth, '', ''),
+							$elm$core$Platform$Cmd$none,
+							$elm$core$Maybe$Nothing);
+					}
+				case 'NoOp':
+					var _v72 = _v0.b;
+					return _Utils_Tuple3(auth, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
+				default:
+					break _v0$33;
+			}
+		}
+		var ignoredMsg = _v0;
+		return _Utils_Tuple3(
+			auth,
+			A2(
+				$author$project$Internal$Logger$newLogR,
+				config,
+				{
+					details: $elm$core$Maybe$Just(
+						$elm$core$Debug$toString(ignoredMsg)),
+					isError: true,
+					isImportant: true,
+					logMsg: 'Ignored message:'
+				}),
+			$elm$core$Maybe$Nothing);
 	});
 var $author$project$Main$update = F2(
 	function (msg, model) {
@@ -12522,10 +14177,7 @@ var $author$project$Main$update = F2(
 					return _Utils_Tuple2(
 						_Utils_update(
 							model,
-							{
-								currentPosition: {anchor: mbAnchor, path: path},
-								url: url
-							}),
+							{url: url}),
 						$elm$core$Platform$Cmd$none);
 				} else {
 					return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
@@ -12571,14 +14223,14 @@ var $author$project$Main$update = F2(
 			case 'AuthMsg':
 				var authPluginMsg = msg.a;
 				var _v5 = A3(
-					$author$project$Auth$AuthPlugin$update,
-					{addLog: $author$project$Main$AddLog},
+					$author$project$Auth$Auth$update,
+					{addLogMsg: $author$project$Main$AddLog, outMsg: $author$project$Main$AuthMsg},
 					authPluginMsg,
 					model.authPlugin);
 				var newAuthPlugin = _v5.a;
 				var authToolCmds = _v5.b;
 				var mbPluginResult = _v5.c;
-				var logInfo = $author$project$Auth$AuthPlugin$getLogInfo(newAuthPlugin);
+				var logInfo = $author$project$Auth$Auth$getLogInfo(newAuthPlugin);
 				return _Utils_Tuple2(
 					_Utils_update(
 						model,
@@ -12590,6 +14242,11 @@ var $author$project$Main$update = F2(
 				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
 		}
 	});
+var $mdgriffith$elm_ui$Internal$Model$AlignX = function (a) {
+	return {$: 'AlignX', a: a};
+};
+var $mdgriffith$elm_ui$Internal$Model$Left = {$: 'Left'};
+var $mdgriffith$elm_ui$Element$alignLeft = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$Left);
 var $mdgriffith$elm_ui$Internal$Model$Unkeyed = function (a) {
 	return {$: 'Unkeyed', a: a};
 };
@@ -17899,9 +19556,6 @@ var $mdgriffith$elm_ui$Element$column = F2(
 						attrs))),
 			$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
 	});
-var $mdgriffith$elm_ui$Internal$Model$AlignX = function (a) {
-	return {$: 'AlignX', a: a};
-};
 var $mdgriffith$elm_ui$Internal$Model$CenterX = {$: 'CenterX'};
 var $mdgriffith$elm_ui$Element$centerX = $mdgriffith$elm_ui$Internal$Model$AlignX($mdgriffith$elm_ui$Internal$Model$CenterX);
 var $mdgriffith$elm_ui$Internal$Model$AlignY = function (a) {
@@ -17977,18 +19631,38 @@ var $mdgriffith$elm_ui$Internal$Model$Text = function (a) {
 var $mdgriffith$elm_ui$Element$text = function (content) {
 	return $mdgriffith$elm_ui$Internal$Model$Text(content);
 };
-var $author$project$Auth$AuthPlugin$ChangePluginMode = function (a) {
-	return {$: 'ChangePluginMode', a: a};
+var $author$project$Auth$Auth$CodeVerificationRequest = {$: 'CodeVerificationRequest'};
+var $author$project$Auth$Auth$CodeVerificationToogleInternalStatus = {$: 'CodeVerificationToogleInternalStatus'};
+var $author$project$Auth$Auth$InitiatePasswordResetRequest = {$: 'InitiatePasswordResetRequest'};
+var $author$project$Auth$Auth$LoginRequest = {$: 'LoginRequest'};
+var $author$project$Auth$Auth$LogoutRequest = {$: 'LogoutRequest'};
+var $author$project$Auth$Auth$NewCodeRequest = {$: 'NewCodeRequest'};
+var $author$project$Auth$Auth$SetConfirmPassword = function (a) {
+	return {$: 'SetConfirmPassword', a: a};
 };
-var $author$project$Auth$AuthPlugin$Login = {$: 'Login'};
-var $author$project$Auth$AuthPlugin$SetPassword = function (a) {
+var $author$project$Auth$Auth$SetEmail = function (a) {
+	return {$: 'SetEmail', a: a};
+};
+var $author$project$Auth$Auth$SetPassword = function (a) {
 	return {$: 'SetPassword', a: a};
 };
-var $author$project$Auth$AuthPlugin$SetUsername = function (a) {
+var $author$project$Auth$Auth$SetUsername = function (a) {
 	return {$: 'SetUsername', a: a};
 };
-var $mdgriffith$elm_ui$Internal$Model$Top = {$: 'Top'};
-var $mdgriffith$elm_ui$Element$alignTop = $mdgriffith$elm_ui$Internal$Model$AlignY($mdgriffith$elm_ui$Internal$Model$Top);
+var $author$project$Auth$Auth$SetVerificationCode = function (a) {
+	return {$: 'SetVerificationCode', a: a};
+};
+var $author$project$Auth$Auth$SignupRequest = {$: 'SignupRequest'};
+var $author$project$Auth$Auth$ToCodeVerification = function (a) {
+	return {$: 'ToCodeVerification', a: a};
+};
+var $author$project$Auth$Auth$ToLogout = function (a) {
+	return {$: 'ToLogout', a: a};
+};
+var $author$project$Auth$Auth$ToSignup = function (a) {
+	return {$: 'ToSignup', a: a};
+};
+var $author$project$Auth$Auth$UpdatePasswordRequest = {$: 'UpdatePasswordRequest'};
 var $mdgriffith$elm_ui$Internal$Model$Button = {$: 'Button'};
 var $mdgriffith$elm_ui$Internal$Model$Describe = function (a) {
 	return {$: 'Describe', a: a};
@@ -18017,7 +19691,6 @@ var $mdgriffith$elm_ui$Element$Input$focusDefault = function (attrs) {
 };
 var $mdgriffith$elm_ui$Element$Events$onClick = A2($elm$core$Basics$composeL, $mdgriffith$elm_ui$Internal$Model$Attr, $elm$html$Html$Events$onClick);
 var $mdgriffith$elm_ui$Element$Input$enter = 'Enter';
-var $elm$json$Json$Decode$fail = _Json_fail;
 var $elm$virtual_dom$VirtualDom$MayPreventDefault = function (a) {
 	return {$: 'MayPreventDefault', a: a};
 };
@@ -18473,6 +20146,45 @@ var $author$project$Style$Helpers$buttonStyle = function (isActive) {
 				A2($elm$html$Html$Attributes$style, 'cursor', 'default'))
 			]));
 };
+var $author$project$Auth$Internal$AdminControlPanel$adminControlView = F2(
+	function (handlers, model) {
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text('Hello ' + model.userProfile.username),
+					A2(
+					$mdgriffith$elm_ui$Element$Input$button,
+					$author$project$Style$Helpers$buttonStyle(true),
+					{
+						label: $mdgriffith$elm_ui$Element$text('Logout'),
+						onPress: $elm$core$Maybe$Just(handlers.toLogout)
+					})
+				]));
+	});
+var $mdgriffith$elm_ui$Internal$Model$Top = {$: 'Top'};
+var $mdgriffith$elm_ui$Element$alignTop = $mdgriffith$elm_ui$Internal$Model$AlignY($mdgriffith$elm_ui$Internal$Model$Top);
+var $mdgriffith$elm_ui$Element$el = F2(
+	function (attrs, child) {
+		return A4(
+			$mdgriffith$elm_ui$Internal$Model$element,
+			$mdgriffith$elm_ui$Internal$Model$asEl,
+			$mdgriffith$elm_ui$Internal$Model$div,
+			A2(
+				$elm$core$List$cons,
+				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
+				A2(
+					$elm$core$List$cons,
+					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
+					attrs)),
+			$mdgriffith$elm_ui$Internal$Model$Unkeyed(
+				_List_fromArray(
+					[child])));
+	});
 var $mdgriffith$elm_ui$Element$Input$TextInputNode = function (a) {
 	return {$: 'TextInputNode', a: a};
 };
@@ -19025,23 +20737,6 @@ var $mdgriffith$elm_ui$Element$Font$color = function (fontColor) {
 			'color',
 			fontColor));
 };
-var $mdgriffith$elm_ui$Element$el = F2(
-	function (attrs, child) {
-		return A4(
-			$mdgriffith$elm_ui$Internal$Model$element,
-			$mdgriffith$elm_ui$Internal$Model$asEl,
-			$mdgriffith$elm_ui$Internal$Model$div,
-			A2(
-				$elm$core$List$cons,
-				$mdgriffith$elm_ui$Element$width($mdgriffith$elm_ui$Element$shrink),
-				A2(
-					$elm$core$List$cons,
-					$mdgriffith$elm_ui$Element$height($mdgriffith$elm_ui$Element$shrink),
-					attrs)),
-			$mdgriffith$elm_ui$Internal$Model$Unkeyed(
-				_List_fromArray(
-					[child])));
-	});
 var $mdgriffith$elm_ui$Element$Input$renderPlaceholder = F3(
 	function (_v0, forPlaceholder, on) {
 		var placeholderAttrs = _v0.a;
@@ -19318,29 +21013,141 @@ var $mdgriffith$elm_ui$Element$Input$textHelper = F3(
 			textOptions.label,
 			wrappedInput);
 	});
-var $mdgriffith$elm_ui$Element$Input$currentPassword = F2(
-	function (attrs, pass) {
-		return A3(
-			$mdgriffith$elm_ui$Element$Input$textHelper,
-			{
-				autofill: $elm$core$Maybe$Just('current-password'),
-				spellchecked: false,
-				type_: $mdgriffith$elm_ui$Element$Input$TextInputNode(
-					pass.show ? 'text' : 'password')
-			},
-			attrs,
-			{label: pass.label, onChange: pass.onChange, placeholder: pass.placeholder, text: pass.text});
+var $mdgriffith$elm_ui$Element$Input$email = $mdgriffith$elm_ui$Element$Input$textHelper(
+	{
+		autofill: $elm$core$Maybe$Just('email'),
+		spellchecked: false,
+		type_: $mdgriffith$elm_ui$Element$Input$TextInputNode('email')
 	});
+var $mdgriffith$elm_ui$Element$none = $mdgriffith$elm_ui$Internal$Model$Empty;
+var $mdgriffith$elm_ui$Internal$Model$FontSize = function (a) {
+	return {$: 'FontSize', a: a};
+};
+var $mdgriffith$elm_ui$Internal$Flag$fontSize = $mdgriffith$elm_ui$Internal$Flag$flag(4);
+var $mdgriffith$elm_ui$Element$Font$size = function (i) {
+	return A2(
+		$mdgriffith$elm_ui$Internal$Model$StyleClass,
+		$mdgriffith$elm_ui$Internal$Flag$fontSize,
+		$mdgriffith$elm_ui$Internal$Model$FontSize(i));
+};
+var $author$project$Auth$Common$errorView = F2(
+	function (config, model) {
+		var _v0 = _Utils_Tuple2(
+			model.showValidationErrors,
+			A2($elm$core$Dict$get, config.tag, model.validationErrors));
+		if (_v0.a && (_v0.b.$ === 'Just')) {
+			var errors = _v0.b.a;
+			return A2(
+				$mdgriffith$elm_ui$Element$column,
+				_List_fromArray(
+					[
+						$mdgriffith$elm_ui$Element$Font$color(
+						A3($mdgriffith$elm_ui$Element$rgb, 1, 0, 0)),
+						$mdgriffith$elm_ui$Element$Font$size(12),
+						$mdgriffith$elm_ui$Element$spacing(10)
+					]),
+				A2($elm$core$List$map, $mdgriffith$elm_ui$Element$text, errors));
+		} else {
+			return $mdgriffith$elm_ui$Element$none;
+		}
+	});
+var $mdgriffith$elm_ui$Element$Input$Above = {$: 'Above'};
 var $mdgriffith$elm_ui$Element$Input$Label = F3(
 	function (a, b, c) {
 		return {$: 'Label', a: a, b: b, c: c};
 	});
-var $mdgriffith$elm_ui$Element$Input$OnLeft = {$: 'OnLeft'};
-var $mdgriffith$elm_ui$Element$Input$labelLeft = $mdgriffith$elm_ui$Element$Input$Label($mdgriffith$elm_ui$Element$Input$OnLeft);
+var $mdgriffith$elm_ui$Element$Input$labelAbove = $mdgriffith$elm_ui$Element$Input$Label($mdgriffith$elm_ui$Element$Input$Above);
 var $mdgriffith$elm_ui$Internal$Model$Px = function (a) {
 	return {$: 'Px', a: a};
 };
 var $mdgriffith$elm_ui$Element$px = $mdgriffith$elm_ui$Internal$Model$Px;
+var $author$project$Style$Helpers$textInputStyle = _List_fromArray(
+	[
+		$mdgriffith$elm_ui$Element$width(
+		$mdgriffith$elm_ui$Element$px(250)),
+		A2($mdgriffith$elm_ui$Element$paddingXY, 5, 5),
+		$mdgriffith$elm_ui$Element$spacing(15),
+		$mdgriffith$elm_ui$Element$focused(
+		_List_fromArray(
+			[
+				A2(
+				$mdgriffith$elm_ui$Element$Border$glow,
+				A3($mdgriffith$elm_ui$Element$rgb, 1, 1, 1),
+				0)
+			]))
+	]);
+var $author$project$Auth$Common$customEmailInput = F2(
+	function (config, model) {
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$mdgriffith$elm_ui$Element$Input$email,
+					$author$project$Style$Helpers$textInputStyle,
+					{
+						label: A2(
+							$mdgriffith$elm_ui$Element$Input$labelAbove,
+							_List_fromArray(
+								[$mdgriffith$elm_ui$Element$centerY]),
+							A2(
+								$mdgriffith$elm_ui$Element$el,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$width(
+										$mdgriffith$elm_ui$Element$px(110))
+									]),
+								$mdgriffith$elm_ui$Element$text(config.label))),
+						onChange: config.handler,
+						placeholder: $elm$core$Maybe$Nothing,
+						text: config.value
+					}),
+					A2($author$project$Auth$Common$errorView, config, model)
+				]));
+	});
+var $mdgriffith$elm_ui$Element$Input$text = $mdgriffith$elm_ui$Element$Input$textHelper(
+	{
+		autofill: $elm$core$Maybe$Nothing,
+		spellchecked: false,
+		type_: $mdgriffith$elm_ui$Element$Input$TextInputNode('text')
+	});
+var $author$project$Auth$Common$customInput = F2(
+	function (config, model) {
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$mdgriffith$elm_ui$Element$Input$text,
+					$author$project$Style$Helpers$textInputStyle,
+					{
+						label: A2(
+							$mdgriffith$elm_ui$Element$Input$labelAbove,
+							_List_fromArray(
+								[$mdgriffith$elm_ui$Element$centerY]),
+							A2(
+								$mdgriffith$elm_ui$Element$el,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$width(
+										$mdgriffith$elm_ui$Element$px(110))
+									]),
+								$mdgriffith$elm_ui$Element$text(config.label))),
+						onChange: config.handler,
+						placeholder: $elm$core$Maybe$Nothing,
+						text: config.value
+					}),
+					A2($author$project$Auth$Common$errorView, config, model)
+				]));
+	});
 var $mdgriffith$elm_ui$Element$row = F2(
 	function (attrs, children) {
 		return A4(
@@ -19359,39 +21166,255 @@ var $mdgriffith$elm_ui$Element$row = F2(
 						attrs))),
 			$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
 	});
-var $mdgriffith$elm_ui$Internal$Model$FontSize = function (a) {
-	return {$: 'FontSize', a: a};
-};
-var $mdgriffith$elm_ui$Internal$Flag$fontSize = $mdgriffith$elm_ui$Internal$Flag$flag(4);
-var $mdgriffith$elm_ui$Element$Font$size = function (i) {
-	return A2(
-		$mdgriffith$elm_ui$Internal$Model$StyleClass,
-		$mdgriffith$elm_ui$Internal$Flag$fontSize,
-		$mdgriffith$elm_ui$Internal$Model$FontSize(i));
-};
-var $mdgriffith$elm_ui$Element$Input$text = $mdgriffith$elm_ui$Element$Input$textHelper(
-	{
-		autofill: $elm$core$Maybe$Nothing,
-		spellchecked: false,
-		type_: $mdgriffith$elm_ui$Element$Input$TextInputNode('text')
+var $author$project$Auth$Common$validateModelIfShowError = F2(
+	function (validator, model) {
+		var _v0 = _Utils_Tuple2(
+			model.showValidationErrors,
+			validator(model));
+		if (_v0.a) {
+			if (_v0.b.$ === 'Err') {
+				var validationErrors = _v0.b.a;
+				return _Utils_update(
+					model,
+					{validationErrors: validationErrors});
+			} else {
+				return _Utils_update(
+					model,
+					{validationErrors: $elm$core$Dict$empty});
+			}
+		} else {
+			return model;
+		}
 	});
-var $author$project$Style$Helpers$textInputStyle = _List_fromArray(
-	[
-		$mdgriffith$elm_ui$Element$width(
-		$mdgriffith$elm_ui$Element$px(250)),
-		A2($mdgriffith$elm_ui$Element$paddingXY, 5, 5),
-		$mdgriffith$elm_ui$Element$spacing(15),
-		$mdgriffith$elm_ui$Element$focused(
-		_List_fromArray(
-			[
-				A2(
-				$mdgriffith$elm_ui$Element$Border$glow,
-				A3($mdgriffith$elm_ui$Element$rgb, 1, 1, 1),
-				0)
-			]))
-	]);
-var $author$project$Auth$AuthPlugin$loginView = F3(
-	function (config, status_, model) {
+var $author$project$Auth$Internal$CodeVerification$codeVerificationView = F2(
+	function (handlers, model) {
+		var waitingView = A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text('Processing request, please wait')
+				]));
+		var successView = A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text('Code verification success')
+				]));
+		var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$CodeVerification$validateCodeVerification, model);
+		var requestNewCodeView = A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$author$project$Auth$Common$customEmailInput,
+					{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
+					model_),
+					A2(
+					$mdgriffith$elm_ui$Element$row,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$spacing(15)
+						]),
+					_List_fromArray(
+						[
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(
+								_Utils_eq(model_.newCodeRequestStatus, $author$project$Internal$Helpers$Initial)),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Get a new code'),
+								onPress: $elm$core$Maybe$Just(handlers.newCodeRequest)
+							}),
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(true),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Back'),
+								onPress: $elm$core$Maybe$Just(handlers.toogleInternalStatus)
+							})
+						]))
+				]));
+		var status = model_.requestStatus;
+		var initialView = A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$author$project$Auth$Common$customInput,
+					{handler: handlers.setVerificationCode, label: 'Input verification code: ', tag: 'code', value: model_.code},
+					model_),
+					model.askForEmail ? A2(
+					$author$project$Auth$Common$customEmailInput,
+					{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
+					model_) : $mdgriffith$elm_ui$Element$none,
+					A2(
+					$mdgriffith$elm_ui$Element$row,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$spacing(15)
+						]),
+					_List_fromArray(
+						[
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(true),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Confirm code'),
+								onPress: $elm$core$Maybe$Just(handlers.codeVerificationRequest)
+							})
+						])),
+					A2(
+					$mdgriffith$elm_ui$Element$el,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$Events$onClick(handlers.toogleInternalStatus)
+						]),
+					$mdgriffith$elm_ui$Element$text('I did not get a code'))
+				]));
+		var failureView = A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text('Could not verify code'),
+					A2(
+					$mdgriffith$elm_ui$Element$row,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$spacing(15)
+						]),
+					_List_fromArray(
+						[
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(true),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Try again'),
+								onPress: $elm$core$Maybe$Just(
+									handlers.toCodeVerification(
+										_Utils_update(
+											model_,
+											{requestStatus: $author$project$Internal$Helpers$Initial})))
+							}),
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(true),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Back'),
+								onPress: $elm$core$Maybe$Nothing
+							})
+						]))
+				]));
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$padding(15),
+					$mdgriffith$elm_ui$Element$spacing(15),
+					$mdgriffith$elm_ui$Element$Font$size(16),
+					$mdgriffith$elm_ui$Element$alignTop
+				]),
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$text(model_.verificationNotice),
+					function () {
+					var _v0 = model.internalStatus;
+					if (_v0.$ === 'CodeVerification') {
+						switch (status.$) {
+							case 'Initial':
+								return initialView;
+							case 'Waiting':
+								return waitingView;
+							case 'Success':
+								return successView;
+							default:
+								return failureView;
+						}
+					} else {
+						return requestNewCodeView;
+					}
+				}()
+				]));
+	});
+var $author$project$Auth$Internal$Logout$initLogoutModel = {autoLogout: false, requestStatus: $author$project$Internal$Helpers$Initial};
+var $author$project$Auth$Internal$PasswordReset$initPasswordResetModel = {
+	confirmPassword: '',
+	email: '',
+	encryptedSelectorAndToken: $elm$json$Json$Encode$string(''),
+	password: '',
+	passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Initial),
+	showValidationErrors: false,
+	validationErrors: $elm$core$Dict$empty
+};
+var $author$project$Auth$Internal$Signup$initSignupModel = {confirmPassword: '', email: '', password: '', requestStatus: $author$project$Internal$Helpers$Initial, showValidationErrors: false, username: '', validationErrors: $elm$core$Dict$empty};
+var $mdgriffith$elm_ui$Element$Input$currentPassword = F2(
+	function (attrs, pass) {
+		return A3(
+			$mdgriffith$elm_ui$Element$Input$textHelper,
+			{
+				autofill: $elm$core$Maybe$Just('current-password'),
+				spellchecked: false,
+				type_: $mdgriffith$elm_ui$Element$Input$TextInputNode(
+					pass.show ? 'text' : 'password')
+			},
+			attrs,
+			{label: pass.label, onChange: pass.onChange, placeholder: pass.placeholder, text: pass.text});
+	});
+var $author$project$Auth$Common$customCurrentPasswordInput = F2(
+	function (config, model) {
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$mdgriffith$elm_ui$Element$Input$currentPassword,
+					$author$project$Style$Helpers$textInputStyle,
+					{
+						label: A2(
+							$mdgriffith$elm_ui$Element$Input$labelAbove,
+							_List_fromArray(
+								[$mdgriffith$elm_ui$Element$centerY]),
+							A2(
+								$mdgriffith$elm_ui$Element$el,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$width(
+										$mdgriffith$elm_ui$Element$px(110))
+									]),
+								$mdgriffith$elm_ui$Element$text(config.label))),
+						onChange: config.handler,
+						placeholder: $elm$core$Maybe$Nothing,
+						show: false,
+						text: config.value
+					}),
+					A2($author$project$Auth$Common$errorView, config, model)
+				]));
+	});
+var $author$project$Auth$Internal$Login$loginView = F2(
+	function (handlers, model) {
 		var waitingView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19410,26 +21433,10 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Connexion réussie!'),
-					A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$spacing(15)
-						]),
-					_List_fromArray(
-						[
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Deconnexion'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LogoutMode($author$project$Internal$Helpers$Initial)))
-							})
-						]))
+					$mdgriffith$elm_ui$Element$text('Connexion réussie!')
 				]));
+		var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$Login$validateLogin, model);
+		var status = model_.requestStatus;
 		var initialView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19439,46 +21446,13 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 			_List_fromArray(
 				[
 					A2(
-					$mdgriffith$elm_ui$Element$Input$text,
-					$author$project$Style$Helpers$textInputStyle,
-					{
-						label: A2(
-							$mdgriffith$elm_ui$Element$Input$labelLeft,
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$centerY]),
-							A2(
-								$mdgriffith$elm_ui$Element$el,
-								_List_fromArray(
-									[
-										$mdgriffith$elm_ui$Element$width(
-										$mdgriffith$elm_ui$Element$px(110))
-									]),
-								$mdgriffith$elm_ui$Element$text('Nom utilisateur: '))),
-						onChange: $author$project$Auth$AuthPlugin$SetUsername,
-						placeholder: $elm$core$Maybe$Nothing,
-						text: model.username
-					}),
+					$author$project$Auth$Common$customInput,
+					{handler: handlers.setUsername, label: 'Username: ', tag: 'username', value: model_.username},
+					model_),
 					A2(
-					$mdgriffith$elm_ui$Element$Input$currentPassword,
-					$author$project$Style$Helpers$textInputStyle,
-					{
-						label: A2(
-							$mdgriffith$elm_ui$Element$Input$labelLeft,
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$centerY]),
-							A2(
-								$mdgriffith$elm_ui$Element$el,
-								_List_fromArray(
-									[
-										$mdgriffith$elm_ui$Element$width(
-										$mdgriffith$elm_ui$Element$px(110))
-									]),
-								$mdgriffith$elm_ui$Element$text('Mot de passe: '))),
-						onChange: $author$project$Auth$AuthPlugin$SetPassword,
-						placeholder: $elm$core$Maybe$Nothing,
-						show: false,
-						text: model.password
-					}),
+					$author$project$Auth$Common$customCurrentPasswordInput,
+					{handler: handlers.setPassword, label: 'Password: ', tag: 'password', value: model_.password},
+					model_),
 					A2(
 					$mdgriffith$elm_ui$Element$row,
 					_List_fromArray(
@@ -19491,17 +21465,22 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Connexion'),
-								onPress: $elm$core$Maybe$Just($author$project$Auth$AuthPlugin$Login)
+								label: $mdgriffith$elm_ui$Element$text('Log in'),
+								onPress: $elm$core$Maybe$Just(handlers.loginRequest)
 							}),
 							A2(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Nouvel utilisateur'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$SignUpMode($author$project$Internal$Helpers$Initial)))
+								label: $mdgriffith$elm_ui$Element$text('New user signup'),
+								onPress: $elm$core$Maybe$Just(handlers.toSignup)
+							}),
+							A2(
+							$mdgriffith$elm_ui$Element$Input$button,
+							$author$project$Style$Helpers$buttonStyle(true),
+							{
+								label: $mdgriffith$elm_ui$Element$text('Forgot password'),
+								onPress: $elm$core$Maybe$Just(handlers.toPasswordReset)
 							})
 						]))
 				]));
@@ -19527,9 +21506,7 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
 								label: $mdgriffith$elm_ui$Element$text('Réessayer'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)))
+								onPress: $elm$core$Maybe$Just(handlers.toLogin)
 							})
 						]))
 				]));
@@ -19546,7 +21523,7 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 				[
 					$mdgriffith$elm_ui$Element$text('Connexion: '),
 					function () {
-					switch (status_.$) {
+					switch (status.$) {
 						case 'Initial':
 							return initialView;
 						case 'Waiting':
@@ -19559,9 +21536,8 @@ var $author$project$Auth$AuthPlugin$loginView = F3(
 				}()
 				]));
 	});
-var $author$project$Auth$AuthPlugin$Logout = {$: 'Logout'};
-var $author$project$Auth$AuthPlugin$logoutView = F3(
-	function (config, status_, model) {
+var $author$project$Auth$Internal$Logout$logoutView = F2(
+	function (handlers, model) {
 		var waitingView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19570,7 +21546,7 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Traitement en cours, veuillez patienter')
+					$mdgriffith$elm_ui$Element$text('Processing request, please wait')
 				]));
 		var successView = A2(
 			$mdgriffith$elm_ui$Element$column,
@@ -19580,7 +21556,7 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Déconnexion réussie!'),
+					$mdgriffith$elm_ui$Element$text('Logout successful!'),
 					A2(
 					$mdgriffith$elm_ui$Element$row,
 					_List_fromArray(
@@ -19593,13 +21569,12 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Connexion'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)))
+								label: $mdgriffith$elm_ui$Element$text('Log in'),
+								onPress: $elm$core$Maybe$Just(handlers.toLogin)
 							})
 						]))
 				]));
+		var status = model.requestStatus;
 		var initialView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19612,8 +21587,8 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 					$mdgriffith$elm_ui$Element$Input$button,
 					$author$project$Style$Helpers$buttonStyle(true),
 					{
-						label: $mdgriffith$elm_ui$Element$text('Se déconnecter'),
-						onPress: $elm$core$Maybe$Just($author$project$Auth$AuthPlugin$Logout)
+						label: $mdgriffith$elm_ui$Element$text('Log out'),
+						onPress: $elm$core$Maybe$Just(handlers.logoutRequest)
 					})
 				]));
 		var failureView = A2(
@@ -19624,7 +21599,7 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Echec déconnexion!'),
+					$mdgriffith$elm_ui$Element$text('Logout failure!'),
 					A2(
 					$mdgriffith$elm_ui$Element$row,
 					_List_fromArray(
@@ -19637,10 +21612,8 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Réessayer'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LogoutMode($author$project$Internal$Helpers$Initial)))
+								label: $mdgriffith$elm_ui$Element$text('Try again'),
+								onPress: $elm$core$Maybe$Just(handlers.toLogout)
 							})
 						]))
 				]));
@@ -19655,9 +21628,9 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Déconnexion: '),
+					$mdgriffith$elm_ui$Element$text('Logout: '),
 					function () {
-					switch (status_.$) {
+					switch (status.$) {
 						case 'Initial':
 							return initialView;
 						case 'Waiting':
@@ -19671,25 +21644,154 @@ var $author$project$Auth$AuthPlugin$logoutView = F3(
 				]));
 	});
 var $mdgriffith$elm_ui$Element$map = $mdgriffith$elm_ui$Internal$Model$map;
-var $author$project$Auth$AuthPlugin$SetConfirmPassword = function (a) {
-	return {$: 'SetConfirmPassword', a: a};
-};
-var $author$project$Auth$AuthPlugin$SignUp = {$: 'SignUp'};
-var $mdgriffith$elm_ui$Element$Input$newPassword = F2(
-	function (attrs, pass) {
-		return A3(
-			$mdgriffith$elm_ui$Element$Input$textHelper,
-			{
-				autofill: $elm$core$Maybe$Just('new-password'),
-				spellchecked: false,
-				type_: $mdgriffith$elm_ui$Element$Input$TextInputNode(
-					pass.show ? 'text' : 'password')
-			},
-			attrs,
-			{label: pass.label, onChange: pass.onChange, placeholder: pass.placeholder, text: pass.text});
+var $author$project$Auth$Internal$PasswordReset$waitingView = A2(
+	$mdgriffith$elm_ui$Element$column,
+	_List_fromArray(
+		[
+			$mdgriffith$elm_ui$Element$spacing(15)
+		]),
+	_List_fromArray(
+		[
+			$mdgriffith$elm_ui$Element$text('Processing request, please wait')
+		]));
+var $author$project$Auth$Internal$PasswordReset$passwordResetView = F2(
+	function (handlers, model) {
+		var _v0 = model.passwordResetStatus;
+		if (_v0.$ === 'InitiatingPasswordResetRequest') {
+			switch (_v0.a.$) {
+				case 'Initial':
+					var _v1 = _v0.a;
+					var model_ = A2(
+						$author$project$Auth$Common$validateModelIfShowError,
+						$author$project$Auth$Common$validateErrorDict($author$project$Auth$Common$validateEmail),
+						model);
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$author$project$Auth$Common$customEmailInput,
+								{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
+								model_),
+								A2(
+								$mdgriffith$elm_ui$Element$row,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$spacing(15)
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Send'),
+											onPress: $elm$core$Maybe$Just(handlers.initiatePasswordResetRequest)
+										}),
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Back'),
+											onPress: $elm$core$Maybe$Just(handlers.toLogin)
+										})
+									]))
+							]));
+				case 'Waiting':
+					var _v2 = _v0.a;
+					return $author$project$Auth$Internal$PasswordReset$waitingView;
+				case 'Success':
+					var _v3 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+				default:
+					var _v4 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+			}
+		} else {
+			switch (_v0.a.$) {
+				case 'Initial':
+					var _v5 = _v0.a;
+					var model_ = A2(
+						$author$project$Auth$Common$validateModelIfShowError,
+						$author$project$Auth$Common$validateErrorDict(
+							$rtfeldman$elm_validate$Validate$all(
+								_List_fromArray(
+									[$author$project$Auth$Common$validatePassword, $author$project$Auth$Common$validateConfirmPasword]))),
+						model);
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$author$project$Auth$Common$customCurrentPasswordInput,
+								{handler: handlers.setPassword, label: 'Password: ', tag: 'password', value: model_.password},
+								model_),
+								A2(
+								$author$project$Auth$Common$customCurrentPasswordInput,
+								{handler: handlers.setConfirmPassword, label: 'Confirm password: ', tag: 'confirmPassword', value: model_.confirmPassword},
+								model_),
+								A2(
+								$mdgriffith$elm_ui$Element$row,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$spacing(15)
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Send'),
+											onPress: $elm$core$Maybe$Just(handlers.updatePasswordRequest)
+										}),
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Back'),
+											onPress: $elm$core$Maybe$Just(handlers.toLogin)
+										})
+									]))
+							]));
+				case 'Waiting':
+					var _v6 = _v0.a;
+					return $author$project$Auth$Internal$PasswordReset$waitingView;
+				case 'Success':
+					var _v7 = _v0.a;
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$text('password updated succesfully'),
+								A2(
+								$mdgriffith$elm_ui$Element$Input$button,
+								$author$project$Style$Helpers$buttonStyle(true),
+								{
+									label: $mdgriffith$elm_ui$Element$text('Back to login'),
+									onPress: $elm$core$Maybe$Just(handlers.toLogin)
+								})
+							]));
+				default:
+					var _v8 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+			}
+		}
 	});
-var $author$project$Auth$AuthPlugin$signUpView = F3(
-	function (config, status_, model) {
+var $author$project$Auth$Internal$Signup$signupView = F2(
+	function (handlers, model) {
 		var waitingView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19698,7 +21800,7 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Traitement en cours, veuillez patienter')
+					$mdgriffith$elm_ui$Element$text('Processing request, please wait')
 				]));
 		var successView = A2(
 			$mdgriffith$elm_ui$Element$column,
@@ -19708,26 +21810,10 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Inscription réussie!'),
-					A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$spacing(15)
-						]),
-					_List_fromArray(
-						[
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Connexion'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)))
-							})
-						]))
+					$mdgriffith$elm_ui$Element$text('Signup successful!')
 				]));
+		var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$Signup$validateSignup, model);
+		var status = model_.requestStatus;
 		var initialView = A2(
 			$mdgriffith$elm_ui$Element$column,
 			_List_fromArray(
@@ -19737,67 +21823,21 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 			_List_fromArray(
 				[
 					A2(
-					$mdgriffith$elm_ui$Element$Input$text,
-					$author$project$Style$Helpers$textInputStyle,
-					{
-						label: A2(
-							$mdgriffith$elm_ui$Element$Input$labelLeft,
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$centerY]),
-							A2(
-								$mdgriffith$elm_ui$Element$el,
-								_List_fromArray(
-									[
-										$mdgriffith$elm_ui$Element$width(
-										$mdgriffith$elm_ui$Element$px(110))
-									]),
-								$mdgriffith$elm_ui$Element$text('Nom utilisateur: '))),
-						onChange: $author$project$Auth$AuthPlugin$SetUsername,
-						placeholder: $elm$core$Maybe$Nothing,
-						text: model.username
-					}),
+					$author$project$Auth$Common$customInput,
+					{handler: handlers.setUsername, label: 'Username: ', tag: 'username', value: model_.username},
+					model_),
 					A2(
-					$mdgriffith$elm_ui$Element$Input$newPassword,
-					$author$project$Style$Helpers$textInputStyle,
-					{
-						label: A2(
-							$mdgriffith$elm_ui$Element$Input$labelLeft,
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$centerY]),
-							A2(
-								$mdgriffith$elm_ui$Element$el,
-								_List_fromArray(
-									[
-										$mdgriffith$elm_ui$Element$width(
-										$mdgriffith$elm_ui$Element$px(110))
-									]),
-								$mdgriffith$elm_ui$Element$text('Mot de passe: '))),
-						onChange: $author$project$Auth$AuthPlugin$SetPassword,
-						placeholder: $elm$core$Maybe$Nothing,
-						show: false,
-						text: model.password
-					}),
+					$author$project$Auth$Common$customEmailInput,
+					{handler: handlers.setEmail, label: 'Email: ', tag: 'email', value: model_.email},
+					model_),
 					A2(
-					$mdgriffith$elm_ui$Element$Input$newPassword,
-					$author$project$Style$Helpers$textInputStyle,
-					{
-						label: A2(
-							$mdgriffith$elm_ui$Element$Input$labelLeft,
-							_List_fromArray(
-								[$mdgriffith$elm_ui$Element$centerY]),
-							A2(
-								$mdgriffith$elm_ui$Element$el,
-								_List_fromArray(
-									[
-										$mdgriffith$elm_ui$Element$width(
-										$mdgriffith$elm_ui$Element$px(110))
-									]),
-								$mdgriffith$elm_ui$Element$text('Confirmation: '))),
-						onChange: $author$project$Auth$AuthPlugin$SetConfirmPassword,
-						placeholder: $elm$core$Maybe$Nothing,
-						show: false,
-						text: model.confirmPassword
-					}),
+					$author$project$Auth$Common$customCurrentPasswordInput,
+					{handler: handlers.setPassword, label: 'Password: ', tag: 'password', value: model_.password},
+					model_),
+					A2(
+					$author$project$Auth$Common$customCurrentPasswordInput,
+					{handler: handlers.setConfirmPassword, label: 'Confirm password: ', tag: 'confirmPassword', value: model_.confirmPassword},
+					model_),
 					A2(
 					$mdgriffith$elm_ui$Element$row,
 					_List_fromArray(
@@ -19810,17 +21850,15 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Envoyer'),
-								onPress: $elm$core$Maybe$Just($author$project$Auth$AuthPlugin$SignUp)
+								label: $mdgriffith$elm_ui$Element$text('Send'),
+								onPress: $elm$core$Maybe$Just(handlers.signupRequest)
 							}),
 							A2(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
-								label: $mdgriffith$elm_ui$Element$text('Retour'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)))
+								label: $mdgriffith$elm_ui$Element$text('Back'),
+								onPress: $elm$core$Maybe$Just(handlers.toLogin)
 							})
 						]))
 				]));
@@ -19832,7 +21870,7 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Echec inscription!'),
+					$mdgriffith$elm_ui$Element$text('Signup failure!'),
 					A2(
 					$mdgriffith$elm_ui$Element$row,
 					_List_fromArray(
@@ -19846,18 +21884,14 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
 								label: $mdgriffith$elm_ui$Element$text('Réessayer'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$SignUpMode($author$project$Internal$Helpers$Initial)))
+								onPress: $elm$core$Maybe$Just(handlers.toSignup)
 							}),
 							A2(
 							$mdgriffith$elm_ui$Element$Input$button,
 							$author$project$Style$Helpers$buttonStyle(true),
 							{
 								label: $mdgriffith$elm_ui$Element$text('Retour'),
-								onPress: $elm$core$Maybe$Just(
-									$author$project$Auth$AuthPlugin$ChangePluginMode(
-										$author$project$Auth$AuthPlugin$LoginMode($author$project$Internal$Helpers$Initial)))
+								onPress: $elm$core$Maybe$Just(handlers.toLogin)
 							})
 						]))
 				]));
@@ -19872,9 +21906,9 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 				]),
 			_List_fromArray(
 				[
-					$mdgriffith$elm_ui$Element$text('Nouvel utilisateur: '),
+					$mdgriffith$elm_ui$Element$text('New user signup:'),
 					function () {
-					switch (status_.$) {
+					switch (status.$) {
 						case 'Initial':
 							return initialView;
 						case 'Waiting':
@@ -19887,23 +21921,103 @@ var $author$project$Auth$AuthPlugin$signUpView = F3(
 				}()
 				]));
 	});
-var $author$project$Auth$AuthPlugin$view = F2(
-	function (config, model) {
+var $author$project$Auth$Internal$UserControlPanel$userControlView = F2(
+	function (handlers, model) {
+		return $mdgriffith$elm_ui$Element$none;
+	});
+var $author$project$Auth$Auth$view = F2(
+	function (config, auth) {
 		return A2(
 			$mdgriffith$elm_ui$Element$map,
-			model.externalMsg,
+			config.outMsg,
 			function () {
-				var _v0 = model.pluginMode;
-				switch (_v0.$) {
-					case 'SignUpMode':
-						var status_ = _v0.a;
-						return A3($author$project$Auth$AuthPlugin$signUpView, config, status_, model);
-					case 'LoginMode':
-						var status_ = _v0.a;
-						return A3($author$project$Auth$AuthPlugin$loginView, config, status_, model);
+				switch (auth.$) {
+					case 'Login':
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$Login$loginView,
+							{
+								loginRequest: $author$project$Auth$Auth$LoginRequest,
+								setPassword: $author$project$Auth$Auth$SetPassword,
+								setUsername: $author$project$Auth$Auth$SetUsername,
+								toLogin: A2(
+									$author$project$Auth$Auth$ToLogin,
+									_Utils_update(
+										model,
+										{requestStatus: $author$project$Internal$Helpers$Initial}),
+									false),
+								toPasswordReset: $author$project$Auth$Auth$ToPasswordReset($author$project$Auth$Internal$PasswordReset$initPasswordResetModel),
+								toSignup: $author$project$Auth$Auth$ToSignup($author$project$Auth$Internal$Signup$initSignupModel)
+							},
+							model);
+					case 'PasswordReset':
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$PasswordReset$passwordResetView,
+							{
+								initiatePasswordResetRequest: $author$project$Auth$Auth$InitiatePasswordResetRequest,
+								setConfirmPassword: $author$project$Auth$Auth$SetConfirmPassword,
+								setEmail: $author$project$Auth$Auth$SetEmail,
+								setPassword: $author$project$Auth$Auth$SetPassword,
+								toLogin: A2($author$project$Auth$Auth$ToLogin, $author$project$Auth$Internal$Login$initLogin, false),
+								updatePasswordRequest: $author$project$Auth$Auth$UpdatePasswordRequest
+							},
+							model);
+					case 'CodeVerification':
+						var onVerified = auth.a;
+						var state = auth.b;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$CodeVerification$codeVerificationView,
+							{codeVerificationRequest: $author$project$Auth$Auth$CodeVerificationRequest, newCodeRequest: $author$project$Auth$Auth$NewCodeRequest, setEmail: $author$project$Auth$Auth$SetEmail, setVerificationCode: $author$project$Auth$Auth$SetVerificationCode, toCodeVerification: $author$project$Auth$Auth$ToCodeVerification, toogleInternalStatus: $author$project$Auth$Auth$CodeVerificationToogleInternalStatus},
+							model);
+					case 'UserControlPanel':
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$UserControlPanel$userControlView,
+							{},
+							model);
+					case 'AdminControlPanel':
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$AdminControlPanel$adminControlView,
+							{
+								toLogout: $author$project$Auth$Auth$ToLogout($author$project$Auth$Internal$Logout$initLogoutModel)
+							},
+							model);
+					case 'Signup':
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$Signup$signupView,
+							{
+								setConfirmPassword: $author$project$Auth$Auth$SetConfirmPassword,
+								setEmail: $author$project$Auth$Auth$SetEmail,
+								setPassword: $author$project$Auth$Auth$SetPassword,
+								setUsername: $author$project$Auth$Auth$SetUsername,
+								signupRequest: $author$project$Auth$Auth$SignupRequest,
+								toLogin: A2($author$project$Auth$Auth$ToLogin, $author$project$Auth$Internal$Login$initLogin, false),
+								toSignup: $author$project$Auth$Auth$ToSignup(
+									_Utils_update(
+										model,
+										{requestStatus: $author$project$Internal$Helpers$Initial}))
+							},
+							model);
 					default:
-						var status_ = _v0.a;
-						return A3($author$project$Auth$AuthPlugin$logoutView, config, status_, model);
+						var state = auth.a;
+						var model = $the_sett$elm_state_machines$StateMachine$untag(state);
+						return A2(
+							$author$project$Auth$Internal$Logout$logoutView,
+							{
+								logoutRequest: $author$project$Auth$Auth$LogoutRequest,
+								toLogin: A2($author$project$Auth$Auth$ToLogin, $author$project$Auth$Internal$Login$initLogin, false),
+								toLogout: $author$project$Auth$Auth$ToLogout($author$project$Auth$Internal$Logout$initLogoutModel)
+							},
+							model);
 				}
 			}());
 	});
@@ -19912,7 +22026,7 @@ var $author$project$Main$content = function (model) {
 		_List_fromArray(
 			[
 				_Utils_Tuple2(
-				'/home',
+				'/',
 				A2(
 					$mdgriffith$elm_ui$Element$column,
 					_List_Nil,
@@ -19935,8 +22049,8 @@ var $author$project$Main$content = function (model) {
 					_List_fromArray(
 						[
 							A2(
-							$author$project$Auth$AuthPlugin$view,
-							{zone: model.zone},
+							$author$project$Auth$Auth$view,
+							{outMsg: $author$project$Main$AuthMsg},
 							model.authPlugin)
 						])))
 			]));
@@ -20176,7 +22290,197 @@ var $mdgriffith$elm_ui$Element$link = F2(
 				_List_fromArray(
 					[label])));
 	});
-var $mdgriffith$elm_ui$Element$none = $mdgriffith$elm_ui$Internal$Model$Empty;
+var $mdgriffith$elm_ui$Element$html = $mdgriffith$elm_ui$Internal$Model$unstyled;
+var $elm$core$String$cons = _String_cons;
+var $elm$core$String$fromChar = function (_char) {
+	return A2($elm$core$String$cons, _char, '');
+};
+var $elm$core$Bitwise$shiftRightBy = _Bitwise_shiftRightBy;
+var $elm$core$String$repeatHelp = F3(
+	function (n, chunk, result) {
+		return (n <= 0) ? result : A3(
+			$elm$core$String$repeatHelp,
+			n >> 1,
+			_Utils_ap(chunk, chunk),
+			(!(n & 1)) ? result : _Utils_ap(result, chunk));
+	});
+var $elm$core$String$repeat = F2(
+	function (n, chunk) {
+		return A3($elm$core$String$repeatHelp, n, chunk, '');
+	});
+var $elm$core$String$padLeft = F3(
+	function (n, _char, string) {
+		return _Utils_ap(
+			A2(
+				$elm$core$String$repeat,
+				n - $elm$core$String$length(string),
+				$elm$core$String$fromChar(_char)),
+			string);
+	});
+var $author$project$Internal$Logger$formatTime = A2(
+	$elm$core$Basics$composeR,
+	$elm$core$String$fromInt,
+	A2(
+		$elm$core$String$padLeft,
+		2,
+		_Utils_chr('0')));
+var $author$project$Style$Helpers$noAttr = $mdgriffith$elm_ui$Element$htmlAttribute(
+	$elm$html$Html$Attributes$class(''));
+var $elm$time$Time$flooredDiv = F2(
+	function (numerator, denominator) {
+		return $elm$core$Basics$floor(numerator / denominator);
+	});
+var $elm$core$Basics$modBy = _Basics_modBy;
+var $elm$time$Time$toAdjustedMinutesHelp = F3(
+	function (defaultOffset, posixMinutes, eras) {
+		toAdjustedMinutesHelp:
+		while (true) {
+			if (!eras.b) {
+				return posixMinutes + defaultOffset;
+			} else {
+				var era = eras.a;
+				var olderEras = eras.b;
+				if (_Utils_cmp(era.start, posixMinutes) < 0) {
+					return posixMinutes + era.offset;
+				} else {
+					var $temp$defaultOffset = defaultOffset,
+						$temp$posixMinutes = posixMinutes,
+						$temp$eras = olderEras;
+					defaultOffset = $temp$defaultOffset;
+					posixMinutes = $temp$posixMinutes;
+					eras = $temp$eras;
+					continue toAdjustedMinutesHelp;
+				}
+			}
+		}
+	});
+var $elm$time$Time$toAdjustedMinutes = F2(
+	function (_v0, time) {
+		var defaultOffset = _v0.a;
+		var eras = _v0.b;
+		return A3(
+			$elm$time$Time$toAdjustedMinutesHelp,
+			defaultOffset,
+			A2(
+				$elm$time$Time$flooredDiv,
+				$elm$time$Time$posixToMillis(time),
+				60000),
+			eras);
+	});
+var $elm$time$Time$toHour = F2(
+	function (zone, time) {
+		return A2(
+			$elm$core$Basics$modBy,
+			24,
+			A2(
+				$elm$time$Time$flooredDiv,
+				A2($elm$time$Time$toAdjustedMinutes, zone, time),
+				60));
+	});
+var $elm$time$Time$toMinute = F2(
+	function (zone, time) {
+		return A2(
+			$elm$core$Basics$modBy,
+			60,
+			A2($elm$time$Time$toAdjustedMinutes, zone, time));
+	});
+var $author$project$Internal$Logger$logTitleView = F2(
+	function (l, zone) {
+		return A2(
+			$mdgriffith$elm_ui$Element$row,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			_List_fromArray(
+				[
+					A2(
+					$mdgriffith$elm_ui$Element$el,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$Font$color(
+							A3($mdgriffith$elm_ui$Element$rgb, 0.7, 0.7, 0.7))
+						]),
+					$mdgriffith$elm_ui$Element$text(
+						$author$project$Internal$Logger$formatTime(
+							A2($elm$time$Time$toHour, zone, l.timeStamp)) + (':' + $author$project$Internal$Logger$formatTime(
+							A2($elm$time$Time$toMinute, zone, l.timeStamp))))),
+					A2(
+					$mdgriffith$elm_ui$Element$el,
+					_List_fromArray(
+						[
+							l.isError ? $mdgriffith$elm_ui$Element$Font$color(
+							A3($mdgriffith$elm_ui$Element$rgb, 1, 0, 0)) : $author$project$Style$Helpers$noAttr
+						]),
+					$mdgriffith$elm_ui$Element$text(l.message))
+				]));
+	});
+var $mdgriffith$elm_ui$Internal$Model$Max = F2(
+	function (a, b) {
+		return {$: 'Max', a: a, b: b};
+	});
+var $mdgriffith$elm_ui$Element$maximum = F2(
+	function (i, l) {
+		return A2($mdgriffith$elm_ui$Internal$Model$Max, i, l);
+	});
+var $elm$html$Html$pre = _VirtualDom_node('pre');
+var $author$project$Style$Helpers$sides = {bottom: 0, left: 0, right: 0, top: 0};
+var $author$project$Internal$Logger$logsView = F2(
+	function (logs, zone) {
+		var logView = function (log) {
+			var message = log.message;
+			var mbDetails = log.mbDetails;
+			var isError = log.isError;
+			var timeStamp = log.timeStamp;
+			return A2(
+				$mdgriffith$elm_ui$Element$column,
+				_List_fromArray(
+					[
+						$mdgriffith$elm_ui$Element$spacing(5),
+						$mdgriffith$elm_ui$Element$width(
+						A2($mdgriffith$elm_ui$Element$maximum, 500, $mdgriffith$elm_ui$Element$fill))
+					]),
+				_List_fromArray(
+					[
+						A2($author$project$Internal$Logger$logTitleView, log, zone),
+						function () {
+						if (mbDetails.$ === 'Nothing') {
+							return $mdgriffith$elm_ui$Element$none;
+						} else {
+							var details = mbDetails.a;
+							return A2(
+								$mdgriffith$elm_ui$Element$el,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$paddingEach(
+										_Utils_update(
+											$author$project$Style$Helpers$sides,
+											{left: 20})),
+										$mdgriffith$elm_ui$Element$Font$size(12)
+									]),
+								A2(
+									$mdgriffith$elm_ui$Element$el,
+									_List_Nil,
+									$mdgriffith$elm_ui$Element$html(
+										A2(
+											$elm$html$Html$pre,
+											_List_Nil,
+											_List_fromArray(
+												[
+													$elm$html$Html$text(details)
+												])))));
+						}
+					}()
+					]));
+		};
+		return A2(
+			$mdgriffith$elm_ui$Element$column,
+			_List_fromArray(
+				[
+					$mdgriffith$elm_ui$Element$spacing(15)
+				]),
+			A2($elm$core$List$map, logView, logs));
+	});
 var $author$project$Main$view = function (model) {
 	return {
 		body: _List_fromArray(
@@ -20192,14 +22496,19 @@ var $author$project$Main$view = function (model) {
 					]),
 				A2(
 					$mdgriffith$elm_ui$Element$column,
-					_List_Nil,
+					_List_fromArray(
+						[
+							$mdgriffith$elm_ui$Element$spacing(30)
+						]),
 					_List_fromArray(
 						[
 							A2(
 							$mdgriffith$elm_ui$Element$row,
 							_List_fromArray(
 								[
-									$mdgriffith$elm_ui$Element$spacing(15)
+									$mdgriffith$elm_ui$Element$spacing(15),
+									$mdgriffith$elm_ui$Element$padding(15),
+									$mdgriffith$elm_ui$Element$alignLeft
 								]),
 							_List_fromArray(
 								[
@@ -20211,7 +22520,7 @@ var $author$project$Main$view = function (model) {
 											$mdgriffith$elm_ui$Element$el,
 											_List_Nil,
 											$mdgriffith$elm_ui$Element$text('home')),
-										url: A2($elm$url$Url$Builder$absolute, $author$project$Main$docRoot, _List_Nil)
+										url: A2($elm$url$Url$Builder$absolute, _List_Nil, _List_Nil)
 									}),
 									A2(
 									$mdgriffith$elm_ui$Element$link,
@@ -20223,10 +22532,8 @@ var $author$project$Main$view = function (model) {
 											$mdgriffith$elm_ui$Element$text('auth')),
 										url: A2(
 											$elm$url$Url$Builder$absolute,
-											_Utils_ap(
-												$author$project$Main$docRoot,
-												_List_fromArray(
-													['auth'])),
+											_List_fromArray(
+												['auth']),
 											_List_Nil)
 									})
 								])),
@@ -20235,12 +22542,16 @@ var $author$project$Main$view = function (model) {
 							$mdgriffith$elm_ui$Element$none,
 							A2(
 								$elm$core$Dict$get,
+								model.url.path,
+								$author$project$Main$content(model))),
+							A2(
+							$author$project$Internal$Logger$logsView,
+							$elm$core$List$reverse(
 								A2(
-									$elm$core$String$dropLeft,
-									$elm$core$String$length(
-										A2($elm$url$Url$Builder$absolute, $author$project$Main$docRoot, _List_Nil)),
-									model.currentPosition.path),
-								$author$project$Main$content(model)))
+									$elm$core$List$map,
+									$elm$core$Tuple$first,
+									$elm$core$Dict$values(model.logs))),
+							model.zone)
 						])))
 			]),
 		title: 'Basic template'
@@ -20265,4 +22576,4 @@ _Platform_export({'Main':{'init':$author$project$Main$main(
 				},
 				A2($elm$json$Json$Decode$field, 'height', $elm$json$Json$Decode$int));
 		},
-		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Internal.Logger.Log":{"args":[],"type":"{ message : String.String, mbDetails : Maybe.Maybe String.String, isError : Basics.Bool, isImportant : Basics.Bool, timeStamp : Time.Posix }"},"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"WinResize":["Basics.Int","Basics.Int"],"VisibilityChange":["Browser.Events.Visibility"],"AddLog":["Internal.Logger.Log"],"AuthMsg":["Auth.AuthPlugin.Msg"],"NoOp":[]}},"Basics.Bool":{"args":[],"tags":{"True":[],"False":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Auth.AuthPlugin.Msg":{"args":[],"tags":{"SetUsername":["String.String"],"SetPassword":["String.String"],"SetConfirmPassword":["String.String"],"Login":[],"LoginChecked":["Result.Result Http.Error Auth.AuthPlugin.LogInfo"],"ConfirmLogin":["Result.Result Http.Error Auth.AuthPlugin.LogInfo"],"SignUp":[],"ConfirmSignUp":["Result.Result Http.Error Basics.Bool"],"Logout":[],"ConfirmLogout":["Result.Result Http.Error Basics.Bool"],"ChangePluginMode":["Auth.AuthPlugin.PluginMode"],"Ping":[],"PingResult":["Result.Result Http.Error Basics.Bool"],"Quit":[],"NoOp":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}},"Browser.Events.Visibility":{"args":[],"tags":{"Visible":[],"Hidden":[]}},"Http.Error":{"args":[],"tags":{"BadUrl":["String.String"],"Timeout":[],"NetworkError":[],"BadStatus":["Basics.Int"],"BadBody":["String.String"]}},"Auth.AuthPlugin.LogInfo":{"args":[],"tags":{"LoggedIn":["{ username : String.String, sessionId : String.String }"],"LoggedOut":[]}},"Auth.AuthPlugin.PluginMode":{"args":[],"tags":{"SignUpMode":["Internal.Helpers.Status"],"LoginMode":["Internal.Helpers.Status"],"LogoutMode":["Internal.Helpers.Status"]}},"Result.Result":{"args":["error","value"],"tags":{"Ok":["value"],"Err":["error"]}},"Internal.Helpers.Status":{"args":[],"tags":{"Initial":[],"Waiting":[],"Success":[],"Failure":[]}}}}})}});}(this));
+		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Internal.Logger.Log":{"args":[],"type":"{ message : String.String, mbDetails : Maybe.Maybe String.String, isError : Basics.Bool, isImportant : Basics.Bool, timeStamp : Time.Posix }"},"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"},"Auth.Internal.CodeVerification.CodeVerificationModel":{"args":[],"type":"{ code : String.String, email : String.String, askForEmail : Basics.Bool, requestStatus : Internal.Helpers.Status, newCodeRequestStatus : Internal.Helpers.Status, verificationNotice : String.String, verificationEndpoint : String.String, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors, internalStatus : Auth.Internal.CodeVerification.InternalStatus }"},"Auth.Common.FieldId":{"args":[],"type":"String.String"},"Auth.Internal.Login.LoginModel":{"args":[],"type":"{ username : String.String, password : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Logout.LogoutModel":{"args":[],"type":"{ requestStatus : Internal.Helpers.Status, autoLogout : Basics.Bool }"},"Auth.Internal.PasswordReset.PasswordResetModel":{"args":[],"type":"{ email : String.String, password : String.String, confirmPassword : String.String, encryptedSelectorAndToken : Json.Decode.Value, passwordResetStatus : Auth.Internal.PasswordReset.InternalStatus, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Signup.SignupModel":{"args":[],"type":"{ username : String.String, email : String.String, password : String.String, confirmPassword : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Common.ValidationErrors":{"args":[],"type":"Dict.Dict Auth.Common.FieldId (List.List String.String)"},"Json.Decode.Value":{"args":[],"type":"Json.Encode.Value"},"Auth.Common.UserProfile":{"args":[],"type":"{ username : String.String, email : String.String, role : Auth.Common.Role }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"WinResize":["Basics.Int","Basics.Int"],"VisibilityChange":["Browser.Events.Visibility"],"AddLog":["Internal.Logger.Log"],"AuthMsg":["Auth.Auth.Msg"],"NoOp":[]}},"Basics.Bool":{"args":[],"tags":{"True":[],"False":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Auth.Auth.Msg":{"args":[],"tags":{"SetUsername":["String.String"],"SetPassword":["String.String"],"SetConfirmPassword":["String.String"],"SetEmail":["String.String"],"LoginRequest":[],"LoginRequestResult":["Result.Result Http.Error Auth.Internal.Login.LoginResult"],"InitiatePasswordResetRequest":[],"InitiatePasswordResetRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.InitiatePasswordResetResult"],"UpdatePasswordRequest":[],"UpdatePasswordRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.UpdatePasswordResult"],"SetVerificationCode":["String.String"],"CodeVerificationRequest":[],"CodeVerificationRequestResult":["Result.Result Http.Error Auth.Internal.CodeVerification.CodeVerificationResult"],"CodeVerificationToogleInternalStatus":[],"NewCodeRequest":[],"NewCodeResult":["Result.Result Http.Error Auth.Internal.CodeVerification.NewCodeResult"],"SignupRequest":[],"SignupRequestResult":["Result.Result Http.Error Auth.Internal.Signup.SignupResult"],"LogoutRequest":[],"LogoutRequestResult":["Result.Result Http.Error Auth.Internal.Logout.LogoutResult"],"Refresh":[],"RefreshResult":["Result.Result Http.Error Basics.Bool"],"ToLogin":["Auth.Internal.Login.LoginModel","Basics.Bool"],"ToCodeVerification":["Auth.Internal.CodeVerification.CodeVerificationModel"],"ToSignup":["Auth.Internal.Signup.SignupModel"],"ToLogout":["Auth.Internal.Logout.LogoutModel"],"ToPasswordReset":["Auth.Internal.PasswordReset.PasswordResetModel"],"NoOp":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}},"Browser.Events.Visibility":{"args":[],"tags":{"Visible":[],"Hidden":[]}},"Auth.Internal.CodeVerification.CodeVerificationResult":{"args":[],"tags":{"CodeVerificationSuccess":["Json.Decode.Value"],"CodeVerificationFailure":[],"CodeVerificationTooManyAttempts":[]}},"Dict.Dict":{"args":["k","v"],"tags":{"RBNode_elm_builtin":["Dict.NColor","k","v","Dict.Dict k v","Dict.Dict k v"],"RBEmpty_elm_builtin":[]}},"Http.Error":{"args":[],"tags":{"BadUrl":["String.String"],"Timeout":[],"NetworkError":[],"BadStatus":["Basics.Int"],"BadBody":["String.String"]}},"Auth.Internal.PasswordReset.InitiatePasswordResetResult":{"args":[],"tags":{"InitiatePasswordResetSuccess":[],"InitiatePasswordResetInvalidEmail":[],"InitiatePasswordResetEmailNotVerified":[],"InitiatePasswordResetResetDisabled":[],"InitiatePasswordResetTooManyRequests":[]}},"Auth.Internal.CodeVerification.InternalStatus":{"args":[],"tags":{"CodeVerification":[],"RequestNewCode":[]}},"Auth.Internal.PasswordReset.InternalStatus":{"args":[],"tags":{"InitiatingPasswordResetRequest":["Internal.Helpers.Status"],"UpdatingPasswordRequest":["Internal.Helpers.Status"]}},"List.List":{"args":["a"],"tags":{}},"Auth.Internal.Login.LoginResult":{"args":[],"tags":{"LoginSuccess":["Auth.Common.UserProfile"],"LoginWrongCredentials":[],"LoginNeedEmailConfirmation":[],"LoginTooManyRequests":[],"LoginUnknownUsername":[]}},"Auth.Internal.Logout.LogoutResult":{"args":[],"tags":{"LogoutSuccess":[],"LogoutNotLoggedIn":[]}},"Auth.Internal.CodeVerification.NewCodeResult":{"args":[],"tags":{"NewCodeSuccess":[],"NewCodeTooManyAttemps":[],"NewCodeNoPreviousAttempt":[]}},"Result.Result":{"args":["error","value"],"tags":{"Ok":["value"],"Err":["error"]}},"Auth.Internal.Signup.SignupResult":{"args":[],"tags":{"SignupSuccess":[],"SignupInvalidEmail":[],"SignupUserAlreadyExists":[],"SignupTooManyRequests":[],"SignupInvalidPassword":[]}},"Internal.Helpers.Status":{"args":[],"tags":{"Initial":[],"Waiting":[],"Success":[],"Failure":[]}},"Auth.Internal.PasswordReset.UpdatePasswordResult":{"args":[],"tags":{"UpdatePasswordSuccess":[],"UpdatePasswordInvalidSelectorTokenPair":[],"UpdatePasswordTokenExpired":[],"UpdateInitiatePasswordResetDisabled":[],"UpdatePasswordInvalidPassword":[],"UpdatePasswordTooManyRequests":[]}},"Json.Encode.Value":{"args":[],"tags":{"Value":[]}},"Dict.NColor":{"args":[],"tags":{"Red":[],"Black":[]}},"Auth.Common.Role":{"args":[],"tags":{"Admin":[],"User":[]}}}}})}});}(this));
