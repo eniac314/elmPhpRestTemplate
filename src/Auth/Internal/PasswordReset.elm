@@ -24,7 +24,7 @@ type alias PasswordResetModel =
     , password : String
     , confirmPassword : String
     , encryptedSelectorAndToken : Decode.Value
-    , passwordResetStatus : InternalStatus
+    , internalStatus : InternalStatus
     , showValidationErrors : Bool
     , validationErrors : ValidationErrors
     }
@@ -36,7 +36,7 @@ initPasswordResetModel =
     , password = ""
     , confirmPassword = ""
     , encryptedSelectorAndToken = Encode.string ""
-    , passwordResetStatus = InitiatingPasswordResetRequest Initial
+    , internalStatus = InitiatingPasswordResetRequest Initial
     , showValidationErrors = False
     , validationErrors = Dict.empty
     }
@@ -192,7 +192,7 @@ type alias Handlers msg =
 
 passwordResetView : Handlers msg -> PasswordResetModel -> Element msg
 passwordResetView handlers model =
-    case model.passwordResetStatus of
+    case model.internalStatus of
         InitiatingPasswordResetRequest Initial ->
             let
                 model_ =

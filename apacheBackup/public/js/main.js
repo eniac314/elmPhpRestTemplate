@@ -11941,6 +11941,9 @@ var $author$project$Auth$Auth$LogoutRequestResult = function (a) {
 var $author$project$Auth$Auth$PasswordReset = function (a) {
 	return {$: 'PasswordReset', a: a};
 };
+var $author$project$Auth$Internal$CodeVerification$RequestingNewCode = function (a) {
+	return {$: 'RequestingNewCode', a: a};
+};
 var $author$project$Auth$Auth$Signup = function (a) {
 	return {$: 'Signup', a: a};
 };
@@ -11954,6 +11957,9 @@ var $author$project$Auth$Auth$ToPasswordReset = function (a) {
 };
 var $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest = function (a) {
 	return {$: 'UpdatingPasswordRequest', a: a};
+};
+var $author$project$Auth$Internal$CodeVerification$VerifyingCode = function (a) {
+	return {$: 'VerifyingCode', a: a};
 };
 var $author$project$Internal$Helpers$httpErrorToString = function (e) {
 	switch (e.$) {
@@ -11972,8 +11978,17 @@ var $author$project$Internal$Helpers$httpErrorToString = function (e) {
 			return 'Unexpected Json: ' + details;
 	}
 };
-var $author$project$Auth$Internal$CodeVerification$CodeVerification = {$: 'CodeVerification'};
-var $author$project$Auth$Internal$CodeVerification$initCodeVerificationModel = {askForEmail: false, code: '', email: '', internalStatus: $author$project$Auth$Internal$CodeVerification$CodeVerification, newCodeRequestStatus: $author$project$Internal$Helpers$Initial, requestStatus: $author$project$Internal$Helpers$Initial, showValidationErrors: false, validationErrors: $elm$core$Dict$empty, verificationEndpoint: '', verificationNotice: ''};
+var $author$project$Auth$Internal$CodeVerification$initCodeVerificationModel = {
+	askForEmail: false,
+	canResendCode: false,
+	code: '',
+	email: '',
+	internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Initial),
+	showValidationErrors: false,
+	validationErrors: $elm$core$Dict$empty,
+	verificationEndpoint: '',
+	verificationNotice: ''
+};
 var $author$project$Auth$Internal$Logout$LogoutSuccess = {$: 'LogoutSuccess'};
 var $elm$json$Json$Decode$fail = _Json_fail;
 var $author$project$Auth$Common$decodeConstant = F2(
@@ -12736,13 +12751,21 @@ var $author$project$Auth$Auth$toSignup = F2(
 			$the_sett$elm_state_machines$StateMachine$State(signupModel));
 	});
 var $elm$core$Debug$toString = _Debug_toString;
-var $author$project$Auth$Internal$CodeVerification$RequestNewCode = {$: 'RequestNewCode'};
 var $author$project$Auth$Internal$CodeVerification$toogleInternalStatus = function (model) {
-	return _Utils_eq(model.internalStatus, $author$project$Auth$Internal$CodeVerification$CodeVerification) ? _Utils_update(
-		model,
-		{internalStatus: $author$project$Auth$Internal$CodeVerification$RequestNewCode}) : _Utils_update(
-		model,
-		{internalStatus: $author$project$Auth$Internal$CodeVerification$CodeVerification});
+	var _v0 = model.internalStatus;
+	if (_v0.$ === 'VerifyingCode') {
+		return _Utils_update(
+			model,
+			{
+				internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Initial)
+			});
+	} else {
+		return _Utils_update(
+			model,
+			{
+				internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Initial)
+			});
+	}
 };
 var $the_sett$elm_state_machines$StateMachine$untag = function (_v0) {
 	var x = _v0.a;
@@ -12844,7 +12867,7 @@ var $author$project$Auth$Auth$validateThenInitiatePasswordReset = function (mode
 					_Utils_update(
 						model,
 						{
-							passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Waiting)
+							internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Waiting)
 						}))),
 			A2($author$project$Auth$Internal$PasswordReset$initiatePasswordReset, validData, $author$project$Auth$Auth$InitiatePasswordResetRequestResult),
 			$elm$core$Maybe$Nothing);
@@ -12907,7 +12930,9 @@ var $author$project$Auth$Auth$validateThenNewCode = F2(
 					$the_sett$elm_state_machines$StateMachine$State(
 						_Utils_update(
 							model,
-							{newCodeRequestStatus: $author$project$Internal$Helpers$Waiting}))),
+							{
+								internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Waiting)
+							}))),
 				A2($author$project$Auth$Internal$CodeVerification$newCode, validData, $author$project$Auth$Auth$NewCodeResult),
 				$elm$core$Maybe$Nothing);
 		} else {
@@ -13083,7 +13108,7 @@ var $author$project$Auth$Auth$validateThenUpdatePassword = function (model) {
 					_Utils_update(
 						model,
 						{
-							passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Waiting)
+							internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Waiting)
 						}))),
 			A2($author$project$Auth$Internal$PasswordReset$updatePassword, validData, $author$project$Auth$Auth$UpdatePasswordRequestResult),
 			$elm$core$Maybe$Nothing);
@@ -13118,18 +13143,19 @@ var $author$project$Auth$Internal$CodeVerification$validateCodeVerification = $a
 					}
 				},
 				_Utils_Tuple2('code', 'The code is invalid')),
-				A2(
-				$rtfeldman$elm_validate$Validate$ifTrue,
-				function (m) {
-					return _Utils_eq(m.requestStatus, $author$project$Internal$Helpers$Waiting) || _Utils_eq(m.requestStatus, $author$project$Internal$Helpers$Success);
-				},
-				_Utils_Tuple2('admin', 'Can\'t verify code now')),
 				$author$project$Auth$Common$validateEmail
 			])));
-var $author$project$Auth$Internal$CodeVerification$CodeVerificationFailure = {$: 'CodeVerificationFailure'};
-var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationFailure = A2($author$project$Auth$Common$decodeConstant, 'CODE VERIFICATION FAILURE', $author$project$Auth$Internal$CodeVerification$CodeVerificationFailure);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationGenericError = {$: 'CodeVerificationGenericError'};
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationInvalidCode = {$: 'CodeVerificationInvalidCode'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationInvalidCode = A2($author$project$Auth$Common$decodeConstant, 'INVALID CODE', $author$project$Auth$Internal$CodeVerification$CodeVerificationInvalidCode);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationInvalidSelectorTokenPairException = {$: 'CodeVerificationInvalidSelectorTokenPairException'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationInvalidSelectorTokenPairException = A2($author$project$Auth$Common$decodeConstant, 'INVALID SELECTOR TOKEN PAIR EXCEPTION', $author$project$Auth$Internal$CodeVerification$CodeVerificationInvalidSelectorTokenPairException);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationTokenExpiredException = {$: 'CodeVerificationTokenExpiredException'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTokenExpiredException = A2($author$project$Auth$Common$decodeConstant, 'TOKEN EXPIRED EXCEPTION', $author$project$Auth$Internal$CodeVerification$CodeVerificationTokenExpiredException);
 var $author$project$Auth$Internal$CodeVerification$CodeVerificationTooManyAttempts = {$: 'CodeVerificationTooManyAttempts'};
 var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTooManyAttempts = A2($author$project$Auth$Common$decodeConstant, 'CODE VERIFICATION TOO MANY ATTEMPTS', $author$project$Auth$Internal$CodeVerification$CodeVerificationTooManyAttempts);
+var $author$project$Auth$Internal$CodeVerification$CodeVerificationUserAlreadyExistsException = {$: 'CodeVerificationUserAlreadyExistsException'};
+var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationUserAlreadyExistsException = A2($author$project$Auth$Common$decodeConstant, 'USER ALREADY EXISTS EXCEPTION', $author$project$Auth$Internal$CodeVerification$CodeVerificationUserAlreadyExistsException);
 var $author$project$Auth$Internal$CodeVerification$CodeVerificationSuccess = function (a) {
 	return {$: 'CodeVerificationSuccess', a: a};
 };
@@ -13137,12 +13163,22 @@ var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationWithPay
 	$elm$json$Json$Decode$map,
 	$author$project$Auth$Internal$CodeVerification$CodeVerificationSuccess,
 	A2($elm$json$Json$Decode$field, 'codeVerificationPayload', $elm$json$Json$Decode$value));
+var $author$project$Auth$Common$decodeGenericError = function (handler) {
+	return A2(
+		$elm$json$Json$Decode$field,
+		'serverError',
+		A2($author$project$Auth$Common$decodeConstant, 'something went wrong, we are working on it...', handler));
+};
 var $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationResult = $elm$json$Json$Decode$oneOf(
 	_List_fromArray(
 		[
 			A2($elm$json$Json$Decode$field, 'message', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationWithPayloadSuccess),
-			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationFailure),
-			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTooManyAttempts)
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationInvalidCode),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationInvalidSelectorTokenPairException),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTokenExpiredException),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationUserAlreadyExistsException),
+			A2($elm$json$Json$Decode$field, 'serverError', $author$project$Auth$Internal$CodeVerification$decodeCodeVerificationTooManyAttempts),
+			$author$project$Auth$Common$decodeGenericError($author$project$Auth$Internal$CodeVerification$CodeVerificationGenericError)
 		]));
 var $elm$json$Json$Encode$int = _Json_wrap;
 var $author$project$Auth$Internal$CodeVerification$verifyCode = F2(
@@ -13183,7 +13219,9 @@ var $author$project$Auth$Auth$validateThenVerifyCode = F2(
 					$the_sett$elm_state_machines$StateMachine$State(
 						_Utils_update(
 							model,
-							{requestStatus: $author$project$Internal$Helpers$Waiting}))),
+							{
+								internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Waiting)
+							}))),
 				A2($author$project$Auth$Internal$CodeVerification$verifyCode, validData, $author$project$Auth$Auth$CodeVerificationRequestResult),
 				$elm$core$Maybe$Nothing);
 		} else {
@@ -13306,7 +13344,7 @@ var $author$project$Auth$Auth$update = F3(
 													true)),
 											_Utils_update(
 												$author$project$Auth$Internal$CodeVerification$initCodeVerificationModel,
-												{askForEmail: true, verificationEndpoint: '/api/verifyEmail', verificationNotice: 'You need to verify your email address'})),
+												{askForEmail: true, canResendCode: true, verificationEndpoint: '/api/verifyEmail', verificationNotice: 'You need to verify your email address'})),
 										$elm$core$Platform$Cmd$none,
 										$elm$core$Maybe$Nothing);
 							}
@@ -13364,7 +13402,7 @@ var $author$project$Auth$Auth$update = F3(
 														model,
 														{
 															encryptedSelectorAndToken: payload,
-															passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Initial)
+															internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Initial)
 														}));
 											},
 											_Utils_update(
@@ -13380,7 +13418,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13395,7 +13433,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13410,7 +13448,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13425,7 +13463,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13441,7 +13479,7 @@ var $author$project$Auth$Auth$update = F3(
 										_Utils_update(
 											model,
 											{
-												passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+												internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
 											}))),
 								A2(
 									$author$project$Internal$Logger$newLogR,
@@ -13488,7 +13526,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Success)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Success)
 													}))),
 										$elm$core$Platform$Cmd$none,
 										$elm$core$Maybe$Nothing);
@@ -13500,7 +13538,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13515,7 +13553,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13530,7 +13568,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13545,7 +13583,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13560,7 +13598,7 @@ var $author$project$Auth$Auth$update = F3(
 												_Utils_update(
 													model,
 													{
-														passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Failure)
+														internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
@@ -13576,7 +13614,7 @@ var $author$project$Auth$Auth$update = F3(
 										_Utils_update(
 											model,
 											{
-												passwordResetStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
+												internalStatus: $author$project$Auth$Internal$PasswordReset$UpdatingPasswordRequest($author$project$Internal$Helpers$Failure)
 											}))),
 								A2(
 									$author$project$Internal$Logger$newLogR,
@@ -13637,7 +13675,7 @@ var $author$project$Auth$Auth$update = F3(
 					if (_v0.a.$ === 'CodeVerification') {
 						var _v33 = _v0.a;
 						var onVerified = _v33.a;
-						var state = _v33.b;
+						var model = _v33.b.a;
 						var res = _v0.b.a;
 						if (res.$ === 'Ok') {
 							switch (res.a.$) {
@@ -13652,29 +13690,107 @@ var $author$project$Auth$Auth$update = F3(
 									var cmd = _v35.b;
 									var result = _v35.c;
 									return _Utils_Tuple3(newAuth, cmd, result);
-								case 'CodeVerificationFailure':
+								case 'CodeVerificationInvalidCode':
 									var _v36 = res.a;
 									return _Utils_Tuple3(
 										A2(
 											$author$project$Auth$Auth$CodeVerification,
 											onVerified,
-											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
 											config,
-											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification failure'}),
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification invalid code'}),
 										$elm$core$Maybe$Nothing);
-								default:
+								case 'CodeVerificationInvalidSelectorTokenPairException':
 									var _v37 = res.a;
 									return _Utils_Tuple3(
 										A2(
 											$author$project$Auth$Auth$CodeVerification,
 											onVerified,
-											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification invalid token selector pair'}),
+										$elm$core$Maybe$Nothing);
+								case 'CodeVerificationTokenExpiredException':
+									var _v38 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification token expired'}),
+										$elm$core$Maybe$Nothing);
+								case 'CodeVerificationUserAlreadyExistsException':
+									var _v39 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification user already exists'}),
+										$elm$core$Maybe$Nothing);
+								case 'CodeVerificationTooManyAttempts':
+									var _v40 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
 										A2(
 											$author$project$Internal$Logger$newLogR,
 											config,
 											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Code verification failure: too many attempts'}),
+										$elm$core$Maybe$Nothing);
+								default:
+									var _v41 = res.a;
+									return _Utils_Tuple3(
+										A2(
+											$author$project$Auth$Auth$CodeVerification,
+											onVerified,
+											$the_sett$elm_state_machines$StateMachine$State(
+												_Utils_update(
+													model,
+													{
+														internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+													}))),
+										A2(
+											$author$project$Internal$Logger$newLogR,
+											config,
+											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'something went wrong, we are working on it...'}),
 										$elm$core$Maybe$Nothing);
 							}
 						} else {
@@ -13683,7 +13799,12 @@ var $author$project$Auth$Auth$update = F3(
 								A2(
 									$author$project$Auth$Auth$CodeVerification,
 									onVerified,
-									A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
+									$the_sett$elm_state_machines$StateMachine$State(
+										_Utils_update(
+											model,
+											{
+												internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Failure)
+											}))),
 								A2(
 									$author$project$Internal$Logger$newLogR,
 									config,
@@ -13701,10 +13822,10 @@ var $author$project$Auth$Auth$update = F3(
 					}
 				case 'CodeVerificationToogleInternalStatus':
 					if (_v0.a.$ === 'CodeVerification') {
-						var _v38 = _v0.a;
-						var onVerified = _v38.a;
-						var state = _v38.b;
-						var _v39 = _v0.b;
+						var _v42 = _v0.a;
+						var onVerified = _v42.a;
+						var state = _v42.b;
+						var _v43 = _v0.b;
 						return _Utils_Tuple3(
 							A2(
 								$author$project$Auth$Auth$CodeVerification,
@@ -13719,9 +13840,9 @@ var $author$project$Auth$Auth$update = F3(
 					}
 				case 'ToCodeVerification':
 					if (_v0.a.$ === 'CodeVerification') {
-						var _v43 = _v0.a;
-						var onVerified = _v43.a;
-						var state = _v43.b;
+						var _v47 = _v0.a;
+						var onVerified = _v47.a;
+						var state = _v47.b;
 						var codeVerificationModel = _v0.b.a;
 						return _Utils_Tuple3(
 							A3($author$project$Auth$Auth$toCodeVerification, state, onVerified, codeVerificationModel),
@@ -13740,9 +13861,9 @@ var $author$project$Auth$Auth$update = F3(
 								$elm$core$Platform$Cmd$none,
 								$elm$core$Maybe$Nothing);
 						case 'CodeVerification':
-							var _v44 = _v0.a;
-							var onVerified = _v44.a;
-							var state = _v44.b;
+							var _v48 = _v0.a;
+							var onVerified = _v48.a;
+							var state = _v48.b;
 							var passwordResetModel = _v0.b.a;
 							return _Utils_Tuple3(
 								A2($author$project$Auth$Auth$toPasswordReset, state, passwordResetModel),
@@ -13753,14 +13874,14 @@ var $author$project$Auth$Auth$update = F3(
 					}
 				case 'NewCodeRequest':
 					if (_v0.a.$ === 'CodeVerification') {
-						var _v45 = _v0.a;
-						var onVerified = _v45.a;
-						var state = _v45.b;
-						var _v46 = _v0.b;
-						var _v47 = A2($author$project$Auth$Auth$validateThenNewCode, onVerified, state);
-						var newAuth = _v47.a;
-						var cmd = _v47.b;
-						var result = _v47.c;
+						var _v49 = _v0.a;
+						var onVerified = _v49.a;
+						var state = _v49.b;
+						var _v50 = _v0.b;
+						var _v51 = A2($author$project$Auth$Auth$validateThenNewCode, onVerified, state);
+						var newAuth = _v51.a;
+						var cmd = _v51.b;
+						var result = _v51.c;
 						return _Utils_Tuple3(
 							newAuth,
 							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
@@ -13770,31 +13891,35 @@ var $author$project$Auth$Auth$update = F3(
 					}
 				case 'NewCodeResult':
 					if (_v0.a.$ === 'CodeVerification') {
-						var _v48 = _v0.a;
-						var onVerified = _v48.a;
-						var model = _v48.b.a;
+						var _v52 = _v0.a;
+						var onVerified = _v52.a;
+						var model = _v52.b.a;
 						var res = _v0.b.a;
 						if (res.$ === 'Ok') {
 							switch (res.a.$) {
 								case 'NewCodeSuccess':
-									var _v50 = res.a;
+									var _v54 = res.a;
 									var newAuth = A2(
 										$author$project$Auth$Auth$CodeVerification,
 										onVerified,
 										$the_sett$elm_state_machines$StateMachine$State(
 											_Utils_update(
 												model,
-												{newCodeRequestStatus: $author$project$Internal$Helpers$Success})));
+												{
+													internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Success)
+												})));
 									return _Utils_Tuple3(newAuth, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
 								case 'NewCodeTooManyAttemps':
-									var _v51 = res.a;
+									var _v55 = res.a;
 									var newAuth = A2(
 										$author$project$Auth$Auth$CodeVerification,
 										onVerified,
 										$the_sett$elm_state_machines$StateMachine$State(
 											_Utils_update(
 												model,
-												{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+												{
+													internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Failure)
+												})));
 									return _Utils_Tuple3(
 										newAuth,
 										A2(
@@ -13803,14 +13928,16 @@ var $author$project$Auth$Auth$update = F3(
 											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: false, logMsg: 'Code verification error: too many attempts'}),
 										$elm$core$Maybe$Nothing);
 								default:
-									var _v52 = res.a;
+									var _v56 = res.a;
 									var newAuth = A2(
 										$author$project$Auth$Auth$CodeVerification,
 										onVerified,
 										$the_sett$elm_state_machines$StateMachine$State(
 											_Utils_update(
 												model,
-												{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+												{
+													internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Failure)
+												})));
 									return _Utils_Tuple3(
 										newAuth,
 										A2(
@@ -13827,7 +13954,9 @@ var $author$project$Auth$Auth$update = F3(
 								$the_sett$elm_state_machines$StateMachine$State(
 									_Utils_update(
 										model,
-										{newCodeRequestStatus: $author$project$Internal$Helpers$Failure})));
+										{
+											internalStatus: $author$project$Auth$Internal$CodeVerification$RequestingNewCode($author$project$Internal$Helpers$Failure)
+										})));
 							return _Utils_Tuple3(
 								newAuth,
 								A2(
@@ -13867,11 +13996,11 @@ var $author$project$Auth$Auth$update = F3(
 				case 'SignupRequest':
 					if (_v0.a.$ === 'Signup') {
 						var state = _v0.a.a;
-						var _v55 = _v0.b;
-						var _v56 = $author$project$Auth$Auth$validateThenSignup(state);
-						var newAuth = _v56.a;
-						var cmd = _v56.b;
-						var result = _v56.c;
+						var _v59 = _v0.b;
+						var _v60 = $author$project$Auth$Auth$validateThenSignup(state);
+						var newAuth = _v60.a;
+						var cmd = _v60.b;
+						var result = _v60.c;
 						return _Utils_Tuple3(
 							newAuth,
 							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
@@ -13886,7 +14015,7 @@ var $author$project$Auth$Auth$update = F3(
 						if (res.$ === 'Ok') {
 							switch (res.a.$) {
 								case 'SignupSuccess':
-									var _v58 = res.a;
+									var _v62 = res.a;
 									return _Utils_Tuple3(
 										A3(
 											$author$project$Auth$Auth$toCodeVerification,
@@ -13904,6 +14033,7 @@ var $author$project$Auth$Auth$update = F3(
 											_Utils_update(
 												$author$project$Auth$Internal$CodeVerification$initCodeVerificationModel,
 												{
+													canResendCode: true,
 													email: $the_sett$elm_state_machines$StateMachine$untag(state).email,
 													verificationEndpoint: '/api/verifyEmail',
 													verificationNotice: 'You need to verify your email address'
@@ -13911,7 +14041,7 @@ var $author$project$Auth$Auth$update = F3(
 										$elm$core$Platform$Cmd$none,
 										$elm$core$Maybe$Nothing);
 								case 'SignupInvalidEmail':
-									var _v59 = res.a;
+									var _v63 = res.a;
 									return _Utils_Tuple3(
 										$author$project$Auth$Auth$Signup(
 											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
@@ -13921,7 +14051,7 @@ var $author$project$Auth$Auth$update = F3(
 											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: invalid email'}),
 										$elm$core$Maybe$Nothing);
 								case 'SignupUserAlreadyExists':
-									var _v60 = res.a;
+									var _v64 = res.a;
 									return _Utils_Tuple3(
 										$author$project$Auth$Auth$Signup(
 											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
@@ -13931,7 +14061,7 @@ var $author$project$Auth$Auth$update = F3(
 											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: user already exists'}),
 										$elm$core$Maybe$Nothing);
 								case 'SignupTooManyRequests':
-									var _v61 = res.a;
+									var _v65 = res.a;
 									return _Utils_Tuple3(
 										$author$project$Auth$Auth$Signup(
 											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
@@ -13941,7 +14071,7 @@ var $author$project$Auth$Auth$update = F3(
 											{details: $elm$core$Maybe$Nothing, isError: true, isImportant: true, logMsg: 'Signup error: too many requests'}),
 										$elm$core$Maybe$Nothing);
 								default:
-									var _v62 = res.a;
+									var _v66 = res.a;
 									return _Utils_Tuple3(
 										$author$project$Auth$Auth$Signup(
 											A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
@@ -13975,10 +14105,10 @@ var $author$project$Auth$Auth$update = F3(
 					if (_v0.a.$ === 'AdminControlPanel') {
 						var state = _v0.a.a;
 						var logoutModel = _v0.b.a;
-						var _v63 = A3($author$project$Auth$Auth$toLogout, state, logoutModel, true);
-						var newAuth = _v63.a;
-						var cmd = _v63.b;
-						var result = _v63.c;
+						var _v67 = A3($author$project$Auth$Auth$toLogout, state, logoutModel, true);
+						var newAuth = _v67.a;
+						var cmd = _v67.b;
+						var result = _v67.c;
 						return _Utils_Tuple3(
 							newAuth,
 							A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
@@ -13989,7 +14119,7 @@ var $author$project$Auth$Auth$update = F3(
 				case 'LogoutRequest':
 					if (_v0.a.$ === 'Logout') {
 						var state = _v0.a.a;
-						var _v64 = _v0.b;
+						var _v68 = _v0.b;
 						return _Utils_Tuple3(
 							auth,
 							A2(
@@ -14006,14 +14136,14 @@ var $author$project$Auth$Auth$update = F3(
 						var res = _v0.b.a;
 						if (res.$ === 'Ok') {
 							if (res.a.$ === 'LogoutSuccess') {
-								var _v66 = res.a;
+								var _v70 = res.a;
 								return _Utils_Tuple3(
 									$author$project$Auth$Auth$Logout(
 										A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Success)),
 									$elm$core$Platform$Cmd$none,
 									$elm$core$Maybe$Nothing);
 							} else {
-								var _v67 = res.a;
+								var _v71 = res.a;
 								return _Utils_Tuple3(
 									$author$project$Auth$Auth$Logout(
 										A2($author$project$Auth$Auth$setStateRequestStatus, state, $author$project$Internal$Helpers$Failure)),
@@ -14069,42 +14199,42 @@ var $author$project$Auth$Auth$update = F3(
 								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
 								result);
 						case 'CodeVerification':
-							var _v40 = _v0.a;
-							var onVerified = _v40.a;
-							var state = _v40.b;
-							var _v41 = _v0.b;
-							var loginModel = _v41.a;
-							var autoLogin = _v41.b;
-							var _v42 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
-							var newAuth = _v42.a;
-							var cmd = _v42.b;
-							var result = _v42.c;
+							var _v44 = _v0.a;
+							var onVerified = _v44.a;
+							var state = _v44.b;
+							var _v45 = _v0.b;
+							var loginModel = _v45.a;
+							var autoLogin = _v45.b;
+							var _v46 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v46.a;
+							var cmd = _v46.b;
+							var result = _v46.c;
 							return _Utils_Tuple3(
 								newAuth,
 								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
 								result);
 						case 'Signup':
 							var state = _v0.a.a;
-							var _v53 = _v0.b;
-							var loginModel = _v53.a;
-							var autoLogin = _v53.b;
-							var _v54 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
-							var newAuth = _v54.a;
-							var cmd = _v54.b;
-							var result = _v54.c;
+							var _v57 = _v0.b;
+							var loginModel = _v57.a;
+							var autoLogin = _v57.b;
+							var _v58 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v58.a;
+							var cmd = _v58.b;
+							var result = _v58.c;
 							return _Utils_Tuple3(
 								newAuth,
 								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
 								result);
 						case 'Logout':
 							var state = _v0.a.a;
-							var _v68 = _v0.b;
-							var loginModel = _v68.a;
-							var autoLogin = _v68.b;
-							var _v69 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
-							var newAuth = _v69.a;
-							var cmd = _v69.b;
-							var result = _v69.c;
+							var _v72 = _v0.b;
+							var loginModel = _v72.a;
+							var autoLogin = _v72.b;
+							var _v73 = A3($author$project$Auth$Auth$toLogin, state, loginModel, autoLogin);
+							var newAuth = _v73.a;
+							var cmd = _v73.b;
+							var result = _v73.c;
 							return _Utils_Tuple3(
 								newAuth,
 								A2($elm$core$Platform$Cmd$map, config.outMsg, cmd),
@@ -14113,9 +14243,9 @@ var $author$project$Auth$Auth$update = F3(
 							break _v0$33;
 					}
 				case 'Refresh':
-					var _v70 = _v0.b;
-					var _v71 = $author$project$Auth$Auth$getLogInfo(auth);
-					if (_v71.$ === 'LoggedIn') {
+					var _v74 = _v0.b;
+					var _v75 = $author$project$Auth$Auth$getLogInfo(auth);
+					if (_v75.$ === 'LoggedIn') {
 						return _Utils_Tuple3(
 							auth,
 							A2($elm$core$Platform$Cmd$map, config.outMsg, $author$project$Auth$Auth$refresh),
@@ -14127,7 +14257,7 @@ var $author$project$Auth$Auth$update = F3(
 							$elm$core$Maybe$Nothing);
 					}
 				case 'NoOp':
-					var _v72 = _v0.b;
+					var _v76 = _v0.b;
 					return _Utils_Tuple3(auth, $elm$core$Platform$Cmd$none, $elm$core$Maybe$Nothing);
 				default:
 					break _v0$33;
@@ -20166,8 +20296,17 @@ var $author$project$Auth$Internal$AdminControlPanel$adminControlView = F2(
 					})
 				]));
 	});
-var $mdgriffith$elm_ui$Internal$Model$Top = {$: 'Top'};
-var $mdgriffith$elm_ui$Element$alignTop = $mdgriffith$elm_ui$Internal$Model$AlignY($mdgriffith$elm_ui$Internal$Model$Top);
+var $mdgriffith$elm_ui$Internal$Flag$fontColor = $mdgriffith$elm_ui$Internal$Flag$flag(14);
+var $mdgriffith$elm_ui$Element$Font$color = function (fontColor) {
+	return A2(
+		$mdgriffith$elm_ui$Internal$Model$StyleClass,
+		$mdgriffith$elm_ui$Internal$Flag$fontColor,
+		A3(
+			$mdgriffith$elm_ui$Internal$Model$Colored,
+			'fc-' + $mdgriffith$elm_ui$Internal$Model$formatColorClass(fontColor),
+			'color',
+			fontColor));
+};
 var $mdgriffith$elm_ui$Element$el = F2(
 	function (attrs, child) {
 		return A4(
@@ -20726,17 +20865,6 @@ var $mdgriffith$elm_ui$Element$Input$renderBox = function (_v0) {
 	return $elm$core$String$fromInt(top) + ('px ' + ($elm$core$String$fromInt(right) + ('px ' + ($elm$core$String$fromInt(bottom) + ('px ' + ($elm$core$String$fromInt(left) + 'px'))))));
 };
 var $mdgriffith$elm_ui$Element$Input$charcoal = A3($mdgriffith$elm_ui$Element$rgb, 136 / 255, 138 / 255, 133 / 255);
-var $mdgriffith$elm_ui$Internal$Flag$fontColor = $mdgriffith$elm_ui$Internal$Flag$flag(14);
-var $mdgriffith$elm_ui$Element$Font$color = function (fontColor) {
-	return A2(
-		$mdgriffith$elm_ui$Internal$Model$StyleClass,
-		$mdgriffith$elm_ui$Internal$Flag$fontColor,
-		A3(
-			$mdgriffith$elm_ui$Internal$Model$Colored,
-			'fc-' + $mdgriffith$elm_ui$Internal$Model$formatColorClass(fontColor),
-			'color',
-			fontColor));
-};
 var $mdgriffith$elm_ui$Element$Input$renderPlaceholder = F3(
 	function (_v0, forPlaceholder, on) {
 		var placeholderAttrs = _v0.a;
@@ -21166,6 +21294,7 @@ var $mdgriffith$elm_ui$Element$row = F2(
 						attrs))),
 			$mdgriffith$elm_ui$Internal$Model$Unkeyed(children));
 	});
+var $mdgriffith$elm_ui$Element$Font$underline = $mdgriffith$elm_ui$Internal$Model$htmlClass($mdgriffith$elm_ui$Internal$Style$classes.underline);
 var $author$project$Auth$Common$validateModelIfShowError = F2(
 	function (validator, model) {
 		var _v0 = _Utils_Tuple2(
@@ -21186,186 +21315,195 @@ var $author$project$Auth$Common$validateModelIfShowError = F2(
 			return model;
 		}
 	});
+var $author$project$Auth$Internal$CodeVerification$waitingView = A2(
+	$mdgriffith$elm_ui$Element$column,
+	_List_fromArray(
+		[
+			$mdgriffith$elm_ui$Element$spacing(15)
+		]),
+	_List_fromArray(
+		[
+			$mdgriffith$elm_ui$Element$text('Processing request, please wait')
+		]));
 var $author$project$Auth$Internal$CodeVerification$codeVerificationView = F2(
 	function (handlers, model) {
-		var waitingView = A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(15)
-				]),
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$text('Processing request, please wait')
-				]));
-		var successView = A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(15)
-				]),
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$text('Code verification success')
-				]));
-		var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$CodeVerification$validateCodeVerification, model);
-		var requestNewCodeView = A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(15)
-				]),
-			_List_fromArray(
-				[
-					A2(
-					$author$project$Auth$Common$customEmailInput,
-					{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
-					model_),
-					A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$spacing(15)
-						]),
-					_List_fromArray(
-						[
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(
-								_Utils_eq(model_.newCodeRequestStatus, $author$project$Internal$Helpers$Initial)),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Get a new code'),
-								onPress: $elm$core$Maybe$Just(handlers.newCodeRequest)
-							}),
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Back'),
-								onPress: $elm$core$Maybe$Just(handlers.toogleInternalStatus)
-							})
-						]))
-				]));
-		var status = model_.requestStatus;
-		var initialView = A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(15)
-				]),
-			_List_fromArray(
-				[
-					A2(
-					$author$project$Auth$Common$customInput,
-					{handler: handlers.setVerificationCode, label: 'Input verification code: ', tag: 'code', value: model_.code},
-					model_),
-					model.askForEmail ? A2(
-					$author$project$Auth$Common$customEmailInput,
-					{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
-					model_) : $mdgriffith$elm_ui$Element$none,
-					A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$spacing(15)
-						]),
-					_List_fromArray(
-						[
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Confirm code'),
-								onPress: $elm$core$Maybe$Just(handlers.codeVerificationRequest)
-							})
-						])),
-					A2(
-					$mdgriffith$elm_ui$Element$el,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$Events$onClick(handlers.toogleInternalStatus)
-						]),
-					$mdgriffith$elm_ui$Element$text('I did not get a code'))
-				]));
-		var failureView = A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$spacing(15)
-				]),
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$text('Could not verify code'),
-					A2(
-					$mdgriffith$elm_ui$Element$row,
-					_List_fromArray(
-						[
-							$mdgriffith$elm_ui$Element$spacing(15)
-						]),
-					_List_fromArray(
-						[
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Try again'),
-								onPress: $elm$core$Maybe$Just(
-									handlers.toCodeVerification(
-										_Utils_update(
-											model_,
-											{requestStatus: $author$project$Internal$Helpers$Initial})))
-							}),
-							A2(
-							$mdgriffith$elm_ui$Element$Input$button,
-							$author$project$Style$Helpers$buttonStyle(true),
-							{
-								label: $mdgriffith$elm_ui$Element$text('Back'),
-								onPress: $elm$core$Maybe$Nothing
-							})
-						]))
-				]));
-		return A2(
-			$mdgriffith$elm_ui$Element$column,
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$padding(15),
-					$mdgriffith$elm_ui$Element$spacing(15),
-					$mdgriffith$elm_ui$Element$Font$size(16),
-					$mdgriffith$elm_ui$Element$alignTop
-				]),
-			_List_fromArray(
-				[
-					$mdgriffith$elm_ui$Element$text(model_.verificationNotice),
-					function () {
-					var _v0 = model.internalStatus;
-					if (_v0.$ === 'CodeVerification') {
-						switch (status.$) {
-							case 'Initial':
-								return initialView;
-							case 'Waiting':
-								return waitingView;
-							case 'Success':
-								return successView;
-							default:
-								return failureView;
-						}
-					} else {
-						return requestNewCodeView;
-					}
-				}()
-				]));
+		var _v0 = model.internalStatus;
+		if (_v0.$ === 'VerifyingCode') {
+			switch (_v0.a.$) {
+				case 'Initial':
+					var _v1 = _v0.a;
+					var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$CodeVerification$validateCodeVerification, model);
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$author$project$Auth$Common$customInput,
+								{handler: handlers.setVerificationCode, label: 'Input verification code: ', tag: 'code', value: model_.code},
+								model_),
+								model.askForEmail ? A2(
+								$author$project$Auth$Common$customEmailInput,
+								{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
+								model_) : $mdgriffith$elm_ui$Element$none,
+								A2(
+								$mdgriffith$elm_ui$Element$row,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$spacing(15)
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Confirm code'),
+											onPress: $elm$core$Maybe$Just(handlers.codeVerificationRequest)
+										})
+									])),
+								model.canResendCode ? A2(
+								$mdgriffith$elm_ui$Element$el,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$Events$onClick(handlers.toogleInternalStatus),
+										$mdgriffith$elm_ui$Element$pointer,
+										$mdgriffith$elm_ui$Element$Font$color(
+										A3($mdgriffith$elm_ui$Element$rgb, 0, 0, 1)),
+										$mdgriffith$elm_ui$Element$Font$underline
+									]),
+								$mdgriffith$elm_ui$Element$text('I did not get a code')) : $mdgriffith$elm_ui$Element$none
+							]));
+				case 'Waiting':
+					var _v2 = _v0.a;
+					return $author$project$Auth$Internal$CodeVerification$waitingView;
+				case 'Success':
+					var _v3 = _v0.a;
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$text('Code verification success')
+							]));
+				default:
+					var _v4 = _v0.a;
+					var model_ = A2($author$project$Auth$Common$validateModelIfShowError, $author$project$Auth$Internal$CodeVerification$validateCodeVerification, model);
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$text('Could not verify code'),
+								A2(
+								$mdgriffith$elm_ui$Element$row,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$spacing(15)
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Try again'),
+											onPress: $elm$core$Maybe$Just(
+												handlers.toCodeVerification(
+													_Utils_update(
+														model_,
+														{
+															internalStatus: $author$project$Auth$Internal$CodeVerification$VerifyingCode($author$project$Internal$Helpers$Initial)
+														})))
+										}),
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Back'),
+											onPress: $elm$core$Maybe$Nothing
+										})
+									]))
+							]));
+			}
+		} else {
+			switch (_v0.a.$) {
+				case 'Initial':
+					var _v5 = _v0.a;
+					var model_ = A2(
+						$author$project$Auth$Common$validateModelIfShowError,
+						$author$project$Auth$Common$validateErrorDict($author$project$Auth$Common$validateEmail),
+						model);
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$author$project$Auth$Common$customEmailInput,
+								{handler: handlers.setEmail, label: 'Email:', tag: 'email', value: model_.email},
+								model_),
+								A2(
+								$mdgriffith$elm_ui$Element$row,
+								_List_fromArray(
+									[
+										$mdgriffith$elm_ui$Element$spacing(15)
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Get a new code'),
+											onPress: $elm$core$Maybe$Just(handlers.newCodeRequest)
+										}),
+										A2(
+										$mdgriffith$elm_ui$Element$Input$button,
+										$author$project$Style$Helpers$buttonStyle(true),
+										{
+											label: $mdgriffith$elm_ui$Element$text('Back'),
+											onPress: $elm$core$Maybe$Just(handlers.toogleInternalStatus)
+										})
+									]))
+							]));
+				case 'Waiting':
+					var _v6 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+				case 'Success':
+					var _v7 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+				default:
+					var _v8 = _v0.a;
+					return $mdgriffith$elm_ui$Element$none;
+			}
+		}
 	});
 var $author$project$Auth$Internal$Logout$initLogoutModel = {autoLogout: false, requestStatus: $author$project$Internal$Helpers$Initial};
 var $author$project$Auth$Internal$PasswordReset$initPasswordResetModel = {
 	confirmPassword: '',
 	email: '',
 	encryptedSelectorAndToken: $elm$json$Json$Encode$string(''),
+	internalStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Initial),
 	password: '',
-	passwordResetStatus: $author$project$Auth$Internal$PasswordReset$InitiatingPasswordResetRequest($author$project$Internal$Helpers$Initial),
 	showValidationErrors: false,
 	validationErrors: $elm$core$Dict$empty
 };
 var $author$project$Auth$Internal$Signup$initSignupModel = {confirmPassword: '', email: '', password: '', requestStatus: $author$project$Internal$Helpers$Initial, showValidationErrors: false, username: '', validationErrors: $elm$core$Dict$empty};
+var $mdgriffith$elm_ui$Internal$Model$Top = {$: 'Top'};
+var $mdgriffith$elm_ui$Element$alignTop = $mdgriffith$elm_ui$Internal$Model$AlignY($mdgriffith$elm_ui$Internal$Model$Top);
 var $mdgriffith$elm_ui$Element$Input$currentPassword = F2(
 	function (attrs, pass) {
 		return A3(
@@ -21656,7 +21794,7 @@ var $author$project$Auth$Internal$PasswordReset$waitingView = A2(
 		]));
 var $author$project$Auth$Internal$PasswordReset$passwordResetView = F2(
 	function (handlers, model) {
-		var _v0 = model.passwordResetStatus;
+		var _v0 = model.internalStatus;
 		if (_v0.$ === 'InitiatingPasswordResetRequest') {
 			switch (_v0.a.$) {
 				case 'Initial':
@@ -21709,7 +21847,22 @@ var $author$project$Auth$Internal$PasswordReset$passwordResetView = F2(
 					return $mdgriffith$elm_ui$Element$none;
 				default:
 					var _v4 = _v0.a;
-					return $mdgriffith$elm_ui$Element$none;
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$mdgriffith$elm_ui$Element$Input$button,
+								$author$project$Style$Helpers$buttonStyle(true),
+								{
+									label: $mdgriffith$elm_ui$Element$text('Back'),
+									onPress: $elm$core$Maybe$Just(handlers.toLogin)
+								})
+							]));
 			}
 		} else {
 			switch (_v0.a.$) {
@@ -21786,7 +21939,22 @@ var $author$project$Auth$Internal$PasswordReset$passwordResetView = F2(
 							]));
 				default:
 					var _v8 = _v0.a;
-					return $mdgriffith$elm_ui$Element$none;
+					return A2(
+						$mdgriffith$elm_ui$Element$column,
+						_List_fromArray(
+							[
+								$mdgriffith$elm_ui$Element$spacing(15)
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$mdgriffith$elm_ui$Element$Input$button,
+								$author$project$Style$Helpers$buttonStyle(true),
+								{
+									label: $mdgriffith$elm_ui$Element$text('Back'),
+									onPress: $elm$core$Maybe$Just(handlers.toLogin)
+								})
+							]));
 			}
 		}
 	});
@@ -22576,4 +22744,4 @@ _Platform_export({'Main':{'init':$author$project$Main$main(
 				},
 				A2($elm$json$Json$Decode$field, 'height', $elm$json$Json$Decode$int));
 		},
-		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Internal.Logger.Log":{"args":[],"type":"{ message : String.String, mbDetails : Maybe.Maybe String.String, isError : Basics.Bool, isImportant : Basics.Bool, timeStamp : Time.Posix }"},"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"},"Auth.Internal.CodeVerification.CodeVerificationModel":{"args":[],"type":"{ code : String.String, email : String.String, askForEmail : Basics.Bool, requestStatus : Internal.Helpers.Status, newCodeRequestStatus : Internal.Helpers.Status, verificationNotice : String.String, verificationEndpoint : String.String, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors, internalStatus : Auth.Internal.CodeVerification.InternalStatus }"},"Auth.Common.FieldId":{"args":[],"type":"String.String"},"Auth.Internal.Login.LoginModel":{"args":[],"type":"{ username : String.String, password : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Logout.LogoutModel":{"args":[],"type":"{ requestStatus : Internal.Helpers.Status, autoLogout : Basics.Bool }"},"Auth.Internal.PasswordReset.PasswordResetModel":{"args":[],"type":"{ email : String.String, password : String.String, confirmPassword : String.String, encryptedSelectorAndToken : Json.Decode.Value, passwordResetStatus : Auth.Internal.PasswordReset.InternalStatus, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Signup.SignupModel":{"args":[],"type":"{ username : String.String, email : String.String, password : String.String, confirmPassword : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Common.ValidationErrors":{"args":[],"type":"Dict.Dict Auth.Common.FieldId (List.List String.String)"},"Json.Decode.Value":{"args":[],"type":"Json.Encode.Value"},"Auth.Common.UserProfile":{"args":[],"type":"{ username : String.String, email : String.String, role : Auth.Common.Role }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"WinResize":["Basics.Int","Basics.Int"],"VisibilityChange":["Browser.Events.Visibility"],"AddLog":["Internal.Logger.Log"],"AuthMsg":["Auth.Auth.Msg"],"NoOp":[]}},"Basics.Bool":{"args":[],"tags":{"True":[],"False":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Auth.Auth.Msg":{"args":[],"tags":{"SetUsername":["String.String"],"SetPassword":["String.String"],"SetConfirmPassword":["String.String"],"SetEmail":["String.String"],"LoginRequest":[],"LoginRequestResult":["Result.Result Http.Error Auth.Internal.Login.LoginResult"],"InitiatePasswordResetRequest":[],"InitiatePasswordResetRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.InitiatePasswordResetResult"],"UpdatePasswordRequest":[],"UpdatePasswordRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.UpdatePasswordResult"],"SetVerificationCode":["String.String"],"CodeVerificationRequest":[],"CodeVerificationRequestResult":["Result.Result Http.Error Auth.Internal.CodeVerification.CodeVerificationResult"],"CodeVerificationToogleInternalStatus":[],"NewCodeRequest":[],"NewCodeResult":["Result.Result Http.Error Auth.Internal.CodeVerification.NewCodeResult"],"SignupRequest":[],"SignupRequestResult":["Result.Result Http.Error Auth.Internal.Signup.SignupResult"],"LogoutRequest":[],"LogoutRequestResult":["Result.Result Http.Error Auth.Internal.Logout.LogoutResult"],"Refresh":[],"RefreshResult":["Result.Result Http.Error Basics.Bool"],"ToLogin":["Auth.Internal.Login.LoginModel","Basics.Bool"],"ToCodeVerification":["Auth.Internal.CodeVerification.CodeVerificationModel"],"ToSignup":["Auth.Internal.Signup.SignupModel"],"ToLogout":["Auth.Internal.Logout.LogoutModel"],"ToPasswordReset":["Auth.Internal.PasswordReset.PasswordResetModel"],"NoOp":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}},"Browser.Events.Visibility":{"args":[],"tags":{"Visible":[],"Hidden":[]}},"Auth.Internal.CodeVerification.CodeVerificationResult":{"args":[],"tags":{"CodeVerificationSuccess":["Json.Decode.Value"],"CodeVerificationFailure":[],"CodeVerificationTooManyAttempts":[]}},"Dict.Dict":{"args":["k","v"],"tags":{"RBNode_elm_builtin":["Dict.NColor","k","v","Dict.Dict k v","Dict.Dict k v"],"RBEmpty_elm_builtin":[]}},"Http.Error":{"args":[],"tags":{"BadUrl":["String.String"],"Timeout":[],"NetworkError":[],"BadStatus":["Basics.Int"],"BadBody":["String.String"]}},"Auth.Internal.PasswordReset.InitiatePasswordResetResult":{"args":[],"tags":{"InitiatePasswordResetSuccess":[],"InitiatePasswordResetInvalidEmail":[],"InitiatePasswordResetEmailNotVerified":[],"InitiatePasswordResetResetDisabled":[],"InitiatePasswordResetTooManyRequests":[]}},"Auth.Internal.CodeVerification.InternalStatus":{"args":[],"tags":{"CodeVerification":[],"RequestNewCode":[]}},"Auth.Internal.PasswordReset.InternalStatus":{"args":[],"tags":{"InitiatingPasswordResetRequest":["Internal.Helpers.Status"],"UpdatingPasswordRequest":["Internal.Helpers.Status"]}},"List.List":{"args":["a"],"tags":{}},"Auth.Internal.Login.LoginResult":{"args":[],"tags":{"LoginSuccess":["Auth.Common.UserProfile"],"LoginWrongCredentials":[],"LoginNeedEmailConfirmation":[],"LoginTooManyRequests":[],"LoginUnknownUsername":[]}},"Auth.Internal.Logout.LogoutResult":{"args":[],"tags":{"LogoutSuccess":[],"LogoutNotLoggedIn":[]}},"Auth.Internal.CodeVerification.NewCodeResult":{"args":[],"tags":{"NewCodeSuccess":[],"NewCodeTooManyAttemps":[],"NewCodeNoPreviousAttempt":[]}},"Result.Result":{"args":["error","value"],"tags":{"Ok":["value"],"Err":["error"]}},"Auth.Internal.Signup.SignupResult":{"args":[],"tags":{"SignupSuccess":[],"SignupInvalidEmail":[],"SignupUserAlreadyExists":[],"SignupTooManyRequests":[],"SignupInvalidPassword":[]}},"Internal.Helpers.Status":{"args":[],"tags":{"Initial":[],"Waiting":[],"Success":[],"Failure":[]}},"Auth.Internal.PasswordReset.UpdatePasswordResult":{"args":[],"tags":{"UpdatePasswordSuccess":[],"UpdatePasswordInvalidSelectorTokenPair":[],"UpdatePasswordTokenExpired":[],"UpdateInitiatePasswordResetDisabled":[],"UpdatePasswordInvalidPassword":[],"UpdatePasswordTooManyRequests":[]}},"Json.Encode.Value":{"args":[],"tags":{"Value":[]}},"Dict.NColor":{"args":[],"tags":{"Red":[],"Black":[]}},"Auth.Common.Role":{"args":[],"tags":{"Admin":[],"User":[]}}}}})}});}(this));
+		A2($elm$json$Json$Decode$field, 'width', $elm$json$Json$Decode$int)))({"versions":{"elm":"0.19.1"},"types":{"message":"Main.Msg","aliases":{"Internal.Logger.Log":{"args":[],"type":"{ message : String.String, mbDetails : Maybe.Maybe String.String, isError : Basics.Bool, isImportant : Basics.Bool, timeStamp : Time.Posix }"},"Url.Url":{"args":[],"type":"{ protocol : Url.Protocol, host : String.String, port_ : Maybe.Maybe Basics.Int, path : String.String, query : Maybe.Maybe String.String, fragment : Maybe.Maybe String.String }"},"Auth.Internal.CodeVerification.CodeVerificationModel":{"args":[],"type":"{ code : String.String, email : String.String, askForEmail : Basics.Bool, canResendCode : Basics.Bool, verificationNotice : String.String, verificationEndpoint : String.String, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors, internalStatus : Auth.Internal.CodeVerification.InternalStatus }"},"Auth.Common.FieldId":{"args":[],"type":"String.String"},"Auth.Internal.Login.LoginModel":{"args":[],"type":"{ username : String.String, password : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Logout.LogoutModel":{"args":[],"type":"{ requestStatus : Internal.Helpers.Status, autoLogout : Basics.Bool }"},"Auth.Internal.PasswordReset.PasswordResetModel":{"args":[],"type":"{ email : String.String, password : String.String, confirmPassword : String.String, encryptedSelectorAndToken : Json.Decode.Value, internalStatus : Auth.Internal.PasswordReset.InternalStatus, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Internal.Signup.SignupModel":{"args":[],"type":"{ username : String.String, email : String.String, password : String.String, confirmPassword : String.String, requestStatus : Internal.Helpers.Status, showValidationErrors : Basics.Bool, validationErrors : Auth.Common.ValidationErrors }"},"Auth.Common.ValidationErrors":{"args":[],"type":"Dict.Dict Auth.Common.FieldId (List.List String.String)"},"Json.Decode.Value":{"args":[],"type":"Json.Encode.Value"},"Auth.Common.UserProfile":{"args":[],"type":"{ username : String.String, email : String.String, role : Auth.Common.Role }"}},"unions":{"Main.Msg":{"args":[],"tags":{"ChangeUrl":["Url.Url"],"ClickedLink":["Browser.UrlRequest"],"WinResize":["Basics.Int","Basics.Int"],"VisibilityChange":["Browser.Events.Visibility"],"AddLog":["Internal.Logger.Log"],"AuthMsg":["Auth.Auth.Msg"],"NoOp":[]}},"Basics.Bool":{"args":[],"tags":{"True":[],"False":[]}},"Basics.Int":{"args":[],"tags":{"Int":[]}},"Maybe.Maybe":{"args":["a"],"tags":{"Just":["a"],"Nothing":[]}},"Auth.Auth.Msg":{"args":[],"tags":{"SetUsername":["String.String"],"SetPassword":["String.String"],"SetConfirmPassword":["String.String"],"SetEmail":["String.String"],"LoginRequest":[],"LoginRequestResult":["Result.Result Http.Error Auth.Internal.Login.LoginResult"],"InitiatePasswordResetRequest":[],"InitiatePasswordResetRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.InitiatePasswordResetResult"],"UpdatePasswordRequest":[],"UpdatePasswordRequestResult":["Result.Result Http.Error Auth.Internal.PasswordReset.UpdatePasswordResult"],"SetVerificationCode":["String.String"],"CodeVerificationRequest":[],"CodeVerificationRequestResult":["Result.Result Http.Error Auth.Internal.CodeVerification.CodeVerificationResult"],"CodeVerificationToogleInternalStatus":[],"NewCodeRequest":[],"NewCodeResult":["Result.Result Http.Error Auth.Internal.CodeVerification.NewCodeResult"],"SignupRequest":[],"SignupRequestResult":["Result.Result Http.Error Auth.Internal.Signup.SignupResult"],"LogoutRequest":[],"LogoutRequestResult":["Result.Result Http.Error Auth.Internal.Logout.LogoutResult"],"Refresh":[],"RefreshResult":["Result.Result Http.Error Basics.Bool"],"ToLogin":["Auth.Internal.Login.LoginModel","Basics.Bool"],"ToCodeVerification":["Auth.Internal.CodeVerification.CodeVerificationModel"],"ToSignup":["Auth.Internal.Signup.SignupModel"],"ToLogout":["Auth.Internal.Logout.LogoutModel"],"ToPasswordReset":["Auth.Internal.PasswordReset.PasswordResetModel"],"NoOp":[]}},"Time.Posix":{"args":[],"tags":{"Posix":["Basics.Int"]}},"Url.Protocol":{"args":[],"tags":{"Http":[],"Https":[]}},"String.String":{"args":[],"tags":{"String":[]}},"Browser.UrlRequest":{"args":[],"tags":{"Internal":["Url.Url"],"External":["String.String"]}},"Browser.Events.Visibility":{"args":[],"tags":{"Visible":[],"Hidden":[]}},"Auth.Internal.CodeVerification.CodeVerificationResult":{"args":[],"tags":{"CodeVerificationSuccess":["Json.Decode.Value"],"CodeVerificationInvalidCode":[],"CodeVerificationInvalidSelectorTokenPairException":[],"CodeVerificationTokenExpiredException":[],"CodeVerificationUserAlreadyExistsException":[],"CodeVerificationTooManyAttempts":[],"CodeVerificationGenericError":[]}},"Dict.Dict":{"args":["k","v"],"tags":{"RBNode_elm_builtin":["Dict.NColor","k","v","Dict.Dict k v","Dict.Dict k v"],"RBEmpty_elm_builtin":[]}},"Http.Error":{"args":[],"tags":{"BadUrl":["String.String"],"Timeout":[],"NetworkError":[],"BadStatus":["Basics.Int"],"BadBody":["String.String"]}},"Auth.Internal.PasswordReset.InitiatePasswordResetResult":{"args":[],"tags":{"InitiatePasswordResetSuccess":[],"InitiatePasswordResetInvalidEmail":[],"InitiatePasswordResetEmailNotVerified":[],"InitiatePasswordResetResetDisabled":[],"InitiatePasswordResetTooManyRequests":[]}},"Auth.Internal.CodeVerification.InternalStatus":{"args":[],"tags":{"VerifyingCode":["Internal.Helpers.Status"],"RequestingNewCode":["Internal.Helpers.Status"]}},"Auth.Internal.PasswordReset.InternalStatus":{"args":[],"tags":{"InitiatingPasswordResetRequest":["Internal.Helpers.Status"],"UpdatingPasswordRequest":["Internal.Helpers.Status"]}},"List.List":{"args":["a"],"tags":{}},"Auth.Internal.Login.LoginResult":{"args":[],"tags":{"LoginSuccess":["Auth.Common.UserProfile"],"LoginWrongCredentials":[],"LoginNeedEmailConfirmation":[],"LoginTooManyRequests":[],"LoginUnknownUsername":[]}},"Auth.Internal.Logout.LogoutResult":{"args":[],"tags":{"LogoutSuccess":[],"LogoutNotLoggedIn":[]}},"Auth.Internal.CodeVerification.NewCodeResult":{"args":[],"tags":{"NewCodeSuccess":[],"NewCodeTooManyAttemps":[],"NewCodeNoPreviousAttempt":[]}},"Result.Result":{"args":["error","value"],"tags":{"Ok":["value"],"Err":["error"]}},"Auth.Internal.Signup.SignupResult":{"args":[],"tags":{"SignupSuccess":[],"SignupInvalidEmail":[],"SignupUserAlreadyExists":[],"SignupTooManyRequests":[],"SignupInvalidPassword":[]}},"Internal.Helpers.Status":{"args":[],"tags":{"Initial":[],"Waiting":[],"Success":[],"Failure":[]}},"Auth.Internal.PasswordReset.UpdatePasswordResult":{"args":[],"tags":{"UpdatePasswordSuccess":[],"UpdatePasswordInvalidSelectorTokenPair":[],"UpdatePasswordTokenExpired":[],"UpdateInitiatePasswordResetDisabled":[],"UpdatePasswordInvalidPassword":[],"UpdatePasswordTooManyRequests":[]}},"Json.Encode.Value":{"args":[],"tags":{"Value":[]}},"Dict.NColor":{"args":[],"tags":{"Red":[],"Black":[]}},"Auth.Common.Role":{"args":[],"tags":{"Admin":[],"User":[]}}}}})}});}(this));

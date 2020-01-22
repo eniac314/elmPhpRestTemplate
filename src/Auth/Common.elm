@@ -22,6 +22,11 @@ type alias ValidationErrors =
     Dict FieldId (List String)
 
 
+decodeGenericError handler =
+    decodeConstant "something went wrong, we are working on it..." handler
+        |> Decode.field "serverError"
+
+
 decodeConstant c v =
     Decode.string
         |> Decode.andThen

@@ -20,6 +20,9 @@ if(!isset($auth)){
 function set_email_verification_metadada($code, $email, $selector, $token){
 	global $conn;
 	try{
+		//first remove expired entries
+	    $conn->query("DELETE FROM verification_codes_to_selectors_and_tokens WHERE expires < NOW()");
+		
 		$stmt = $conn->prepare("INSERT INTO verification_codes_to_selectors_and_tokens (verification_code, selector, token, email, expires) VALUES (:code, :selector, :token, :email, NOW() + INTERVAL 5 MINUTE)");
 		$stmt->execute([':code' => $code
 	                   ,':email' => $email
@@ -39,6 +42,8 @@ function set_email_verification_metadada($code, $email, $selector, $token){
 // rows. The function is throttled to 3 call per minute.
 function get_email_verification_metadata($email, $code){
 	global $conn;
+	global $auth;
+	
 	try {
     	// throttle the specified resource or feature to *3* requests per *60* seconds
     	$auth->throttle([ 'code-verification-request', $_SERVER['REMOTE_ADDR' ]], 3, 60);
@@ -59,7 +64,7 @@ function get_email_verification_metadata($email, $code){
 
     	if (empty($res)){
     		trigger_error("Invalid or expired code");
-			print_json_error("Invalid code");
+			print_json_error("INVALID CODE");
 			exit();	
     	}
 
@@ -73,7 +78,7 @@ function get_email_verification_metadata($email, $code){
 	} // end of throttled bloc 
 	catch (\Delight\Auth\TooManyRequestsException $e) {
     	trigger_error("too many code verification requests");
-		print_json_error("too many code verification requests");
+		print_json_error("CODE VERIFICATION TOO MANY ATTEMPTS");
     	exit;
 	}
 }// end of get_email_verification_metadata function

@@ -22,8 +22,7 @@ type alias CodeVerificationModel =
     { code : String
     , email : String
     , askForEmail : Bool
-    , requestStatus : Status
-    , newCodeRequestStatus : Status
+    , canResendCode : Bool
     , verificationNotice : String
     , verificationEndpoint : String
     , showValidationErrors : Bool
@@ -33,16 +32,17 @@ type alias CodeVerificationModel =
 
 
 type InternalStatus
-    = CodeVerification
-    | RequestNewCode
+    = VerifyingCode Status
+    | RequestingNewCode Status
 
 
 toogleInternalStatus model =
-    if model.internalStatus == CodeVerification then
-        { model | internalStatus = RequestNewCode }
+    case model.internalStatus of
+        VerifyingCode _ ->
+            { model | internalStatus = RequestingNewCode Initial }
 
-    else
-        { model | internalStatus = CodeVerification }
+        _ ->
+            { model | internalStatus = VerifyingCode Initial }
 
 
 initCodeVerificationModel : CodeVerificationModel
@@ -50,13 +50,12 @@ initCodeVerificationModel =
     { code = ""
     , email = ""
     , askForEmail = False
-    , requestStatus = Initial
-    , newCodeRequestStatus = Initial
+    , canResendCode = False
     , verificationNotice = ""
     , verificationEndpoint = ""
     , showValidationErrors = False
     , validationErrors = Dict.empty
-    , internalStatus = CodeVerification
+    , internalStatus = VerifyingCode Initial
     }
 
 
@@ -73,14 +72,15 @@ validateCodeVerification =
                             False
                 )
                 ( "code", "The code is invalid" )
-            , ifTrue
-                (\m ->
-                    m.requestStatus
-                        == Waiting
-                        || m.requestStatus
-                        == Success
-                )
-                ( "admin", "Can't verify code now" )
+
+            --, ifTrue
+            --    (\m ->
+            --        m.requestStatus
+            --            == Waiting
+            --            || m.requestStatus
+            --            == Success
+            --    )
+            --    ( "admin", "Can't verify code now" )
             , validateEmail
             ]
         )
@@ -116,16 +116,24 @@ verifyCode validData handler =
 
 type CodeVerificationResult
     = CodeVerificationSuccess Decode.Value
-    | CodeVerificationFailure
+    | CodeVerificationInvalidCode
+    | CodeVerificationInvalidSelectorTokenPairException
+    | CodeVerificationTokenExpiredException
+    | CodeVerificationUserAlreadyExistsException
     | CodeVerificationTooManyAttempts
+    | CodeVerificationGenericError
 
 
 decodeCodeVerificationResult : Decode.Decoder CodeVerificationResult
 decodeCodeVerificationResult =
     Decode.oneOf
         [ Decode.field "message" decodeCodeVerificationWithPayloadSuccess
-        , Decode.field "serverError" decodeCodeVerificationFailure
+        , Decode.field "serverError" decodeCodeVerificationInvalidCode
+        , Decode.field "serverError" decodeCodeVerificationInvalidSelectorTokenPairException
+        , Decode.field "serverError" decodeCodeVerificationTokenExpiredException
+        , Decode.field "serverError" decodeCodeVerificationUserAlreadyExistsException
         , Decode.field "serverError" decodeCodeVerificationTooManyAttempts
+        , decodeGenericError CodeVerificationGenericError
         ]
 
 
@@ -134,8 +142,20 @@ decodeCodeVerificationWithPayloadSuccess =
         |> Decode.map CodeVerificationSuccess
 
 
-decodeCodeVerificationFailure =
-    decodeConstant "CODE VERIFICATION FAILURE" CodeVerificationFailure
+decodeCodeVerificationInvalidCode =
+    decodeConstant "INVALID CODE" CodeVerificationInvalidCode
+
+
+decodeCodeVerificationInvalidSelectorTokenPairException =
+    decodeConstant "INVALID SELECTOR TOKEN PAIR EXCEPTION" CodeVerificationInvalidSelectorTokenPairException
+
+
+decodeCodeVerificationTokenExpiredException =
+    decodeConstant "TOKEN EXPIRED EXCEPTION" CodeVerificationTokenExpiredException
+
+
+decodeCodeVerificationUserAlreadyExistsException =
+    decodeConstant "USER ALREADY EXISTS EXCEPTION" CodeVerificationUserAlreadyExistsException
 
 
 decodeCodeVerificationTooManyAttempts =
@@ -202,14 +222,12 @@ type alias Handlers msg =
 
 codeVerificationView : Handlers msg -> CodeVerificationModel -> Element msg
 codeVerificationView handlers model =
-    let
-        model_ =
-            validateModelIfShowError validateCodeVerification model
-
-        status =
-            model_.requestStatus
-
-        initialView =
+    case model.internalStatus of
+        VerifyingCode Initial ->
+            let
+                model_ =
+                    validateModelIfShowError validateCodeVerification model
+            in
             column
                 [ spacing 15 ]
                 [ customInput
@@ -236,30 +254,42 @@ codeVerificationView handlers model =
                         , label = text "Confirm code"
                         }
                     ]
-                , el
-                    [ Events.onClick handlers.toogleInternalStatus ]
-                    (text "I did not get a code")
+                , if model.canResendCode then
+                    el
+                        [ Events.onClick handlers.toogleInternalStatus
+                        , pointer
+                        , Font.color (rgb 0 0 1)
+                        , Font.underline
+                        ]
+                        (text "I did not get a code")
+
+                  else
+                    Element.none
                 ]
 
-        waitingView =
-            column
-                [ spacing 15 ]
-                [ text "Processing request, please wait" ]
+        VerifyingCode Waiting ->
+            waitingView
 
-        successView =
+        VerifyingCode Success ->
             column
                 [ spacing 15 ]
                 [ text "Code verification success"
                 ]
 
-        failureView =
+        VerifyingCode Failure ->
+            let
+                model_ =
+                    validateModelIfShowError validateCodeVerification model
+            in
             column
                 [ spacing 15 ]
                 [ text "Could not verify code"
                 , row [ spacing 15 ]
                     [ Input.button (buttonStyle True)
                         { onPress =
-                            Just <| handlers.toCodeVerification { model_ | requestStatus = Initial }
+                            Just <|
+                                handlers.toCodeVerification
+                                    { model_ | internalStatus = VerifyingCode Initial }
                         , label = text "Try again"
                         }
                     , Input.button (buttonStyle True)
@@ -270,7 +300,11 @@ codeVerificationView handlers model =
                     ]
                 ]
 
-        requestNewCodeView =
+        RequestingNewCode Initial ->
+            let
+                model_ =
+                    validateModelIfShowError (validateErrorDict validateEmail) model
+            in
             column
                 [ spacing 15 ]
                 [ customEmailInput
@@ -283,7 +317,7 @@ codeVerificationView handlers model =
                 , row
                     [ spacing 15 ]
                     [ Input.button
-                        (buttonStyle (model_.newCodeRequestStatus == Initial))
+                        (buttonStyle True)
                         { onPress = Just handlers.newCodeRequest
                         , label = text "Get a new code"
                         }
@@ -294,29 +328,18 @@ codeVerificationView handlers model =
                         }
                     ]
                 ]
-    in
+
+        RequestingNewCode Waiting ->
+            Element.none
+
+        RequestingNewCode Success ->
+            Element.none
+
+        RequestingNewCode Failure ->
+            Element.none
+
+
+waitingView =
     column
-        [ padding 15
-        , spacing 15
-        , Font.size 16
-        , alignTop
-        ]
-        [ text model_.verificationNotice
-        , case model.internalStatus of
-            CodeVerification ->
-                case status of
-                    Initial ->
-                        initialView
-
-                    Waiting ->
-                        waitingView
-
-                    Success ->
-                        successView
-
-                    Failure ->
-                        failureView
-
-            RequestNewCode ->
-                requestNewCodeView
-        ]
+        [ spacing 15 ]
+        [ text "Processing request, please wait" ]

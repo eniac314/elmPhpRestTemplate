@@ -13,7 +13,7 @@ require_once(DB);
 
 $post_data = get_json_post_data(array('email'));
 $auth = new \Delight\Auth\Auth($conn);
-require_once('./code_verification_utils.inc.php');
+require_once('code_verification_utils.inc.php');
 
 
 try{

@@ -272,8 +272,7 @@ update config msg auth =
                             | verificationNotice = "You need to verify your email address"
                             , verificationEndpoint = "/api/verifyEmail"
                             , askForEmail = True
-
-                            --, onVerified =
+                            , canResendCode = True
                         }
                     , Cmd.none
                     , Nothing
@@ -324,7 +323,7 @@ update config msg auth =
                         (\payload ->
                             ToPasswordReset
                                 { model
-                                    | passwordResetStatus = UpdatingPasswordRequest Initial
+                                    | internalStatus = UpdatingPasswordRequest Initial
                                     , encryptedSelectorAndToken = payload
                                 }
                         )
@@ -338,7 +337,7 @@ update config msg auth =
                     )
 
                 Ok InitiatePasswordResetInvalidEmail ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = InitiatingPasswordResetRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: invalid email"
                         , details = Nothing
@@ -349,7 +348,7 @@ update config msg auth =
                     )
 
                 Ok InitiatePasswordResetEmailNotVerified ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = InitiatingPasswordResetRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: email not verified"
                         , details = Nothing
@@ -360,7 +359,7 @@ update config msg auth =
                     )
 
                 Ok InitiatePasswordResetResetDisabled ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = InitiatingPasswordResetRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: reset disabled"
                         , details = Nothing
@@ -371,7 +370,7 @@ update config msg auth =
                     )
 
                 Ok InitiatePasswordResetTooManyRequests ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = InitiatingPasswordResetRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: too many requests"
                         , details = Nothing
@@ -382,7 +381,7 @@ update config msg auth =
                     )
 
                 Err httpError ->
-                    ( PasswordReset <| State { model | passwordResetStatus = InitiatingPasswordResetRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = InitiatingPasswordResetRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: network or system error"
                         , details = Just <| httpErrorToString httpError
@@ -405,13 +404,13 @@ update config msg auth =
         ( PasswordReset (State model), UpdatePasswordRequestResult res ) ->
             case res of
                 Ok UpdatePasswordSuccess ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Success }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Success }
                     , Cmd.none
                     , Nothing
                     )
 
                 Ok UpdatePasswordInvalidSelectorTokenPair ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: invalid selector token pair "
                         , details = Nothing
@@ -422,7 +421,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordTokenExpired ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: token expired"
                         , details = Nothing
@@ -433,7 +432,7 @@ update config msg auth =
                     )
 
                 Ok UpdateInitiatePasswordResetDisabled ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: password reset disabled"
                         , details = Nothing
@@ -444,7 +443,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordInvalidPassword ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: invalid password"
                         , details = Nothing
@@ -455,7 +454,7 @@ update config msg auth =
                     )
 
                 Ok UpdatePasswordTooManyRequests ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: too many requests"
                         , details = Nothing
@@ -466,7 +465,7 @@ update config msg auth =
                     )
 
                 Err httpError ->
-                    ( PasswordReset <| State { model | passwordResetStatus = UpdatingPasswordRequest Failure }
+                    ( PasswordReset <| State { model | internalStatus = UpdatingPasswordRequest Failure }
                     , newLogR config
                         { logMsg = "Password reset error: network or system error"
                         , details = Just <| httpErrorToString httpError
@@ -503,7 +502,7 @@ update config msg auth =
             , result
             )
 
-        ( CodeVerification onVerified state, CodeVerificationRequestResult res ) ->
+        ( CodeVerification onVerified (State model), CodeVerificationRequestResult res ) ->
             case res of
                 Ok (CodeVerificationSuccess payload) ->
                     let
@@ -515,10 +514,43 @@ update config msg auth =
                     , result
                     )
 
-                Ok CodeVerificationFailure ->
-                    ( CodeVerification onVerified (setStateRequestStatus state Failure)
+                Ok CodeVerificationInvalidCode ->
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
                     , newLogR config
-                        { logMsg = "Code verification failure"
+                        { logMsg = "Code verification invalid code"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok CodeVerificationInvalidSelectorTokenPairException ->
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
+                    , newLogR config
+                        { logMsg = "Code verification invalid token selector pair"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok CodeVerificationTokenExpiredException ->
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
+                    , newLogR config
+                        { logMsg = "Code verification token expired"
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
+                Ok CodeVerificationUserAlreadyExistsException ->
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
+                    , newLogR config
+                        { logMsg = "Code verification user already exists"
                         , details = Nothing
                         , isError = True
                         , isImportant = True
@@ -527,7 +559,7 @@ update config msg auth =
                     )
 
                 Ok CodeVerificationTooManyAttempts ->
-                    ( CodeVerification onVerified (setStateRequestStatus state Failure)
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
                     , newLogR config
                         { logMsg = "Code verification failure: too many attempts"
                         , details = Nothing
@@ -537,8 +569,19 @@ update config msg auth =
                     , Nothing
                     )
 
+                Ok CodeVerificationGenericError ->
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
+                    , newLogR config
+                        { logMsg = "something went wrong, we are working on it..."
+                        , details = Nothing
+                        , isError = True
+                        , isImportant = True
+                        }
+                    , Nothing
+                    )
+
                 Err httpError ->
-                    ( CodeVerification onVerified (setStateRequestStatus state Failure)
+                    ( CodeVerification onVerified <| State { model | internalStatus = VerifyingCode Failure }
                     , newLogR config
                         { logMsg = "Code verification error: network or system error"
                         , details = Just <| httpErrorToString httpError
@@ -593,7 +636,7 @@ update config msg auth =
                 Ok NewCodeSuccess ->
                     let
                         newAuth =
-                            { model | newCodeRequestStatus = Success }
+                            { model | internalStatus = VerifyingCode Initial }
                                 |> State
                                 |> CodeVerification onVerified
                     in
@@ -605,7 +648,7 @@ update config msg auth =
                 Ok NewCodeTooManyAttemps ->
                     let
                         newAuth =
-                            { model | newCodeRequestStatus = Failure }
+                            { model | internalStatus = RequestingNewCode Failure }
                                 |> State
                                 |> CodeVerification onVerified
                     in
@@ -622,7 +665,7 @@ update config msg auth =
                 Ok NewCodeNoPreviousAttempt ->
                     let
                         newAuth =
-                            { model | newCodeRequestStatus = Failure }
+                            { model | internalStatus = RequestingNewCode Failure }
                                 |> State
                                 |> CodeVerification onVerified
                     in
@@ -639,7 +682,7 @@ update config msg auth =
                 Err httpError ->
                     let
                         newAuth =
-                            { model | newCodeRequestStatus = Failure }
+                            { model | internalStatus = RequestingNewCode Failure }
                                 |> State
                                 |> CodeVerification onVerified
                     in
@@ -695,6 +738,7 @@ update config msg auth =
                         { initCodeVerificationModel
                             | verificationNotice = "You need to verify your email address"
                             , verificationEndpoint = "/api/verifyEmail"
+                            , canResendCode = True
                             , email = (untag state).email
 
                             --, onVerified =
@@ -1023,7 +1067,7 @@ validateThenInitiatePasswordReset model =
         validateErrorDict validateEmail model
     of
         Ok validData ->
-            ( State { model | passwordResetStatus = InitiatingPasswordResetRequest Waiting }
+            ( State { model | internalStatus = InitiatingPasswordResetRequest Waiting }
                 |> PasswordReset
             , initiatePasswordReset validData InitiatePasswordResetRequestResult
             , Nothing
@@ -1049,7 +1093,7 @@ validateThenUpdatePassword model =
             model
     of
         Ok validData ->
-            ( State { model | passwordResetStatus = UpdatingPasswordRequest Waiting }
+            ( State { model | internalStatus = UpdatingPasswordRequest Waiting }
                 |> PasswordReset
             , updatePassword validData UpdatePasswordRequestResult
             , Nothing
@@ -1069,7 +1113,7 @@ validateThenNewCode onVerified (State model) =
         validateErrorDict validateEmail model
     of
         Ok validData ->
-            ( State { model | newCodeRequestStatus = Waiting }
+            ( State { model | internalStatus = RequestingNewCode Waiting }
                 |> CodeVerification onVerified
             , newCode validData NewCodeResult
             , Nothing
@@ -1089,7 +1133,7 @@ validateThenVerifyCode onVerified (State model) =
         validateCodeVerification model
     of
         Ok validData ->
-            ( State { model | requestStatus = Waiting }
+            ( State { model | internalStatus = VerifyingCode Waiting }
                 |> CodeVerification onVerified
             , verifyCode validData CodeVerificationRequestResult
             , Nothing
